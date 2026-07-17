@@ -412,7 +412,7 @@
     justify-content: center;
     margin-bottom: 8px;
     overflow: hidden;
-    min-height: 0;
+    min-height: 40px;   /* guarantees the image area never visually collapses to zero */
     flex: 1;   /* claim all remaining vertical space after the caption reserves its own room */
   }
   /* object-fit: contain (not cover) + no forced height — the wrap sizes
@@ -433,6 +433,8 @@
     line-height: 1.4;
     text-align: left;
     flex-shrink: 0;
+    max-height: 2.8em;   /* caps at ~2 lines so it can never squeeze the image out at small popup sizes */
+    overflow: hidden;
   }
   .mock-footer {
     padding: 8px 10px;
