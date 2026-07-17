@@ -332,6 +332,26 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  .size-readout {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--amber);
+    font-weight: 700;
+  }
+  .size-slider-row.full {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .size-slider-row.full input[type="range"] {
+    flex: 1;
+    accent-color: var(--amber);
+  }
+  .size-slider-row.full input[type="range"]:disabled {
+    accent-color: var(--panel-line);
+    cursor: not-allowed;
+  }
   .mock-laptop {
     margin-top: 8px;
     background: #000;
@@ -547,12 +567,13 @@
             <div class="footnote">Resized automatically before sending. Shown large in the popup with your message as a caption underneath.</div>
 
             <div class="preview-toggle-row">
-              <label class="field-label" style="margin:0;">Live Preview</label>
-              <div class="size-slider-row">
-                <span class="size-label">Small</span>
-                <input type="range" id="previewSize" min="60" max="140" value="100" step="5">
-                <span class="size-label">Large</span>
-              </div>
+              <label class="field-label" style="margin:0;">Image Size on Laptop</label>
+              <span class="size-readout" id="sizeReadout">— attach an image first —</span>
+            </div>
+            <div class="size-slider-row full">
+              <span class="size-label">Small</span>
+              <input type="range" id="previewSize" min="150" max="150" value="150" step="1" disabled>
+              <span class="size-label">Large</span>
             </div>
             <div class="mock-laptop">
               <div class="mock-popup" id="mockPopup">
@@ -573,7 +594,7 @@
                 </div>
               </div>
             </div>
-            <div class="footnote">Approximates the real popup on a 1920×1080 laptop screen. Drag the slider to check how a larger or smaller image will look before sending.</div>
+            <div class="footnote">This is the actual size sent to the fleet — drag to the max and the popup's edge will just touch the laptop screen's edge. Locked to your photo's real aspect ratio.</div>
 
             <div class="check-row">
               <input type="checkbox" id="showUpdateBtn">
@@ -695,16 +716,32 @@ msgEl.addEventListener('input', () => {
   updateMockPreview();
 });
 
-// ── Live preview mock — mirrors statusbar.py's real alert popup sizing,
-// scaled against a 1920px-wide reference (matching a real 1920x1080
-// laptop screen). The real popup is up to 760px wide at max image size
-// (ALERT_W in statusbar.py) — 760/1920 = 39.6% of screen width, which is
-// MOCK_BASE_PCT at the slider's 100% (default) position. The laptop
-// frame itself is a FIXED 16:9 box (via CSS aspect-ratio) that never
-// resizes; only the popup's width inside it changes with the slider,
-// and any attached image keeps its own real aspect ratio via
-// object-fit:contain rather than being stretched to fit a fixed box.
-const MOCK_BASE_PCT = 39.6;
+// ── Real image size control — the slider sets an ACTUAL target pixel
+// width that's sent to the laptops and used as the real popup size,
+// not just a cosmetic preview. These constants mirror the exact values
+// used in statusbar.py's centering/sizing math (ALERT_W chrome padding,
+// header/caption/footer/border reserve, and the 1920x1080 reference
+// screen) — if either file's constants drift from the other, the "drag
+// to the max and it just touches the screen edge" guarantee breaks, so
+// keep these in sync with statusbar.py's _CHROME_RESERVE/_BAR_RESERVE
+// if either ever changes.
+const REF_SCREEN_W   = 1920;
+const REF_SCREEN_H   = 1080;
+const CHROME_W_PAD   = 40;    // left+right padding around the image inside the popup
+const CHROME_RESERVE = 180;   // header + caption + footer + dividers + padding (vertical)
+const BAR_RESERVE    = 100;   // top status bar + bottom taskbar combined
+const MIN_TARGET_W   = 200;   // don't let the slider go so small the image is pointless
+
+let imgNaturalW = 0;
+let imgNaturalH = 0;
+let targetImgW  = 0;   // the REAL width (px) that gets sent in the payload
+
+function computeMaxTargetW() {
+  if (!imgNaturalW || !imgNaturalH) return MIN_TARGET_W;
+  const maxByHeight = (REF_SCREEN_H - CHROME_RESERVE - BAR_RESERVE) * (imgNaturalW / imgNaturalH);
+  const maxByWidth  = REF_SCREEN_W - CHROME_W_PAD;
+  return Math.max(MIN_TARGET_W, Math.round(Math.min(maxByHeight, maxByWidth)));
+}
 
 function updateMockTime() {
   const now = new Date();
@@ -720,23 +757,26 @@ function updateMockPreview() {
   const text = msgEl.value.trim();
   mockCaption.textContent = text || 'Your message will appear here.';
 
-  // Only the popup's width (as a % of the fixed 16:9 laptop frame)
-  // changes with the slider — the frame itself is a fixed size via CSS
-  // aspect-ratio, and the image inside keeps its own real aspect ratio
-  // via object-fit:contain, so a square photo stays square and a wide
-  // photo stays wide instead of being stretched into a fixed box.
-  const scale = parseInt(previewSize.value, 10) / 100;
-  mockPopup.style.width = (MOCK_BASE_PCT * scale) + '%';
-
-  if (pendingImageDataUrl) {
+  if (pendingImageDataUrl && imgNaturalW && imgNaturalH) {
     mockImg.src = pendingImageDataUrl;
     mockImgWrap.style.display = 'flex';
+    // Mock popup width is the real target width scaled down to the
+    // fixed 16:9 mock frame's REF_SCREEN_W-equivalent — same proportion
+    // the laptop will actually show, not an arbitrary cosmetic number.
+    const popupPctOfScreen = ((targetImgW + CHROME_W_PAD) / REF_SCREEN_W) * 100;
+    mockPopup.style.width = popupPctOfScreen + '%';
+    sizeReadout.textContent = `${targetImgW} × ${Math.round(targetImgW * (imgNaturalH / imgNaturalW))} px`;
   } else {
     mockImgWrap.style.display = 'none';
+    sizeReadout.textContent = '— attach an image first —';
   }
 }
-previewSize.addEventListener('input', updateMockPreview);
-updateMockPreview();
+
+previewSize.addEventListener('input', () => {
+  targetImgW = parseInt(previewSize.value, 10);
+  updateMockPreview();
+});
+
 
 function setType(type) {
   selectedType = type;
@@ -781,7 +821,7 @@ function resizeImage(file) {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/png'));
+      resolve({ dataUrl: canvas.toDataURL('image/png'), width, height });
     };
     img.onerror = reject;
     reader.readAsDataURL(file);
@@ -797,13 +837,30 @@ imageFile.addEventListener('change', async () => {
   if (!file) return;
   imgDropLabel.textContent = 'Processing…';
   try {
-    pendingImageDataUrl = await resizeImage(file);
+    const result = await resizeImage(file);
+    pendingImageDataUrl = result.dataUrl;
+    imgNaturalW = result.width;
+    imgNaturalH = result.height;
     pendingImageExt = 'png';
     imgPreview.src = pendingImageDataUrl;
     imgPreview.style.display = 'block';
     imgDropLabel.style.display = 'none';
     imgRemove.style.display = 'block';
     imgDrop.classList.add('has-image');
+
+    // Configure the slider with REAL pixel bounds now that we know the
+    // image's actual aspect ratio — min is a sensible small size, max
+    // is the exact point where the popup's edge would touch the laptop
+    // screen's edge (computeMaxTargetW, using the same reserve math as
+    // statusbar.py). Default to a comfortable ~65% of the max rather
+    // than starting at the absolute ceiling.
+    const maxW = computeMaxTargetW();
+    previewSize.min = MIN_TARGET_W;
+    previewSize.max = maxW;
+    previewSize.value = Math.round(MIN_TARGET_W + (maxW - MIN_TARGET_W) * 0.65);
+    previewSize.disabled = false;
+    targetImgW = parseInt(previewSize.value, 10);
+
     updateMockPreview();
   } catch (e) {
     imgDropLabel.textContent = 'Click to attach a photo';
@@ -814,6 +871,9 @@ imageFile.addEventListener('change', async () => {
 imgRemove.addEventListener('click', (ev) => {
   ev.stopPropagation();
   pendingImageDataUrl = null;
+  imgNaturalW = 0;
+  imgNaturalH = 0;
+  targetImgW = 0;
   imageFile.value = '';
   imgPreview.style.display = 'none';
   imgPreview.src = '';
@@ -821,6 +881,10 @@ imgRemove.addEventListener('click', (ev) => {
   imgDropLabel.textContent = 'Click to attach a photo';
   imgRemove.style.display = 'none';
   imgDrop.classList.remove('has-image');
+  previewSize.min = 150;
+  previewSize.max = 150;
+  previewSize.value = 150;
+  previewSize.disabled = true;
   updateMockPreview();
 });
 
@@ -971,6 +1035,11 @@ sendBtn.addEventListener('click', () => {
     show_update_button: (selectedType === 'alert' && showUpdateBtn.checked)
   };
   const imageToSend = (selectedType === 'alert') ? pendingImageDataUrl : null;
+  // The real, chosen target width from the slider — statusbar.py uses
+  // this directly to size the popup on the laptop, locked to the
+  // image's own aspect ratio there too. Falls back to 0 (meaning "use
+  // the laptop's own safe default") if no image is attached.
+  payload.image_target_width = imageToSend ? targetImgW : 0;
   transmitPayload(payload, `Broadcast: ${message.slice(0,60)}`, sendBtn, imageToSend);
 });
 
@@ -984,7 +1053,8 @@ quickUpdateBtn.addEventListener('click', () => {
     type: 'alert',
     id: makeId(),
     show_update_button: true,
-    image_url: ''
+    image_url: '',
+    image_target_width: 0
   };
   transmitPayload(payload, 'Broadcast: Update alert (quick action)', quickUpdateBtn, null);
 });
@@ -997,7 +1067,7 @@ clearBtn.addEventListener('click', async () => {
   showStatus('busy', 'CLEARING…');
   try {
     const { sha } = await getCurrentFile(token);
-    const payload = { message: '', type: 'banner', id: '', show_update_button: false, image_url: '' };
+    const payload = { message: '', type: 'banner', id: '', show_update_button: false, image_url: '', image_target_width: 0 };
     await putFile(token, sha, payload, 'Clear broadcast');
     showStatus('ok', 'CLEARED');
     msgEl.value = '';
