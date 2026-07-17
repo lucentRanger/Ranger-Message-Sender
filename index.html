@@ -370,16 +370,16 @@
   .mock-popup {
     background: #0c141c;
     border: 1px solid var(--amber);
-    width: 39.6%;              /* 760px real popup / 1920px reference screen — see MOCK_BASE_PCT in JS */
-    /* Mirrors the real screen-relative safety clamp in statusbar.py:
-       the popup can never exceed a safe fraction of the frame's height,
-       so the preview can't show a size the real laptop wouldn't
-       actually allow (previously the slider could push a square image
-       edge-to-edge vertically, which the real popup's clamp prevents). */
-    max-height: 82%;
+    /* Width AND height are both set explicitly via JS as real
+       percentages of the reference screen dimensions (see
+       updateMockPreview) — no CSS max-height cap here, since that
+       would silently clip/override the precisely-calculated JS value
+       in edge cases, reintroducing the exact mismatch this was meant
+       to prevent. The slider's own max (computeMaxTargetW) is what
+       keeps the size safe, not a CSS ceiling on top of it. */
     display: flex;
     flex-direction: column;
-    transition: width 0.15s ease;
+    transition: width 0.15s ease, height 0.15s ease;
     font-family: var(--mono);
   }
   .mock-accent { height: 3px; background: var(--amber); flex-shrink: 0; }
@@ -400,6 +400,7 @@
     text-align: center;
     display: flex;
     flex-direction: column;
+    flex: 1;         /* stretch to fill the popup's now explicitly-set height */
     min-height: 0;   /* allows flex children to shrink below their content size */
     overflow: hidden;
   }
@@ -412,7 +413,7 @@
     margin-bottom: 8px;
     overflow: hidden;
     min-height: 0;
-    flex-shrink: 1;
+    flex: 1;   /* claim all remaining vertical space after the caption reserves its own room */
   }
   /* object-fit: contain (not cover) + no forced height — the wrap sizes
      to the image's own real aspect ratio via the <img>'s natural
@@ -774,14 +775,26 @@ function updateMockPreview() {
   if (pendingImageDataUrl && imgNaturalW && imgNaturalH) {
     mockImg.src = pendingImageDataUrl;
     mockImgWrap.style.display = 'flex';
-    // Mock popup width is the real target width scaled down to the
-    // fixed 16:9 mock frame's REF_SCREEN_W-equivalent — same proportion
-    // the laptop will actually show, not an arbitrary cosmetic number.
-    const popupPctOfScreen = ((targetImgW + CHROME_W_PAD) / REF_SCREEN_W) * 100;
-    mockPopup.style.width = popupPctOfScreen + '%';
-    sizeReadout.textContent = `${targetImgW} × ${Math.round(targetImgW * (imgNaturalH / imgNaturalW))} px`;
+
+    // Both WIDTH and HEIGHT are calculated the same way — as a real
+    // percentage of the reference screen dimensions — and set
+    // explicitly. Previously only width was tied to the real target
+    // size; height was left to CSS's natural content flow (image
+    // scales to fit the popup's width, then its height just falls out
+    // of that + header/footer/caption stacking), which has NO fixed
+    // relationship to how tall the real popup is as a proportion of
+    // real screen height. That's why the preview's vertical proportion
+    // didn't match the real laptop even though width did.
+    const targetImgH = Math.round(targetImgW * (imgNaturalH / imgNaturalW));
+    const popupWPct = ((targetImgW + CHROME_W_PAD) / REF_SCREEN_W) * 100;
+    const popupHPct = ((targetImgH + CHROME_RESERVE) / REF_SCREEN_H) * 100;
+    mockPopup.style.width  = popupWPct + '%';
+    mockPopup.style.height = popupHPct + '%';
+
+    sizeReadout.textContent = `${targetImgW} × ${targetImgH} px`;
   } else {
     mockImgWrap.style.display = 'none';
+    mockPopup.style.height = '';
     sizeReadout.textContent = '— attach an image first —';
   }
 }
