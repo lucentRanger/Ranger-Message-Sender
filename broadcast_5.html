@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RTMC IT — Ranger Broadcast Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --asphalt:     #14161a;
+    --asphalt-2:   #1c1f24;
+    --panel-line:  #4a505a;
+    --amber:       #ffb000;
+    --amber-dim:   #d99400;
+    --steel:       #a8c8db;
+    --steel-dim:   #4a6575;
+    --paper:       #f2f2ee;
+    --paper-dim:   #b8bbb4;
+    --hazard:      #ff4d2e;
+    --ok:          #5fd47a;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+    --sign: 'Oswald', 'Arial Narrow', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--asphalt);
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.014) 39px, rgba(255,255,255,0.014) 40px);
+    color: var(--paper);
+    font-family: var(--mono);
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 14px 24px 16px;
+  }
+
+  /* ── Header strip ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--amber);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  header .unit {
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.5px;
+    color: var(--paper);
+    text-transform: uppercase;
+  }
+  header .unit span { color: var(--amber); }
+  header .id {
+    font-size: 10px;
+    color: var(--paper-dim);
+    letter-spacing: 1px;
+  }
+  .subline {
+    font-size: 11px;
+    color: var(--paper-dim);
+    margin: 0 0 10px;
+    letter-spacing: 0.2px;
+  }
+
+  /* ── Two-column console grid — fills a wide viewport instead of a
+     single narrow centered stack ── */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Token access — collapses to a single reopenable strip once set ── */
+  .token-set-strip {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--panel-line);
+    background: var(--asphalt-2);
+    padding: 7px 12px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: var(--paper-dim);
+  }
+  .token-set-strip.show { display: flex; }
+  .token-set-strip .lit { color: var(--ok); }
+  .token-set-strip .lit::before {
+    content: '';
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    margin-right: 7px;
+    box-shadow: 0 0 5px var(--ok);
+  }
+  .token-set-strip button {
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    font-family: var(--sign);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .token-set-strip button:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ── Console panels ── */
+  .panel {
+    border: 1px solid var(--panel-line);
+    background: var(--asphalt-2);
+    margin-bottom: 10px;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--panel-line);
+    font-family: var(--sign);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .panel-head .idx { color: var(--amber-dim); }
+  .panel-body { padding: 10px 12px; }
+
+  /* ── Right column: on-air status + quick actions ── */
+  .col-right .panel { margin-bottom: 10px; }
+  .on-air-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .on-air-row .val { flex: 1; }
+  .quick-btn {
+    width: 100%;
+    background: var(--amber);
+    border: none;
+    color: #14161a;
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 11px 13px;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.35);
+  }
+  .quick-btn:hover { background: #ffc233; }
+  .quick-btn:active { box-shadow: none; transform: translateY(1px); }
+  .quick-btn:disabled { background: var(--amber-dim); color: #444; cursor: not-allowed; box-shadow: none; }
+  .quick-btn .qsub {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+    text-transform: none;
+    color: rgba(20,22,26,0.7);
+    margin-top: 3px;
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 10px;
+    color: var(--paper-dim);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+  label.field-label:not(:first-child) { margin-top: 10px; }
+
+  input[type="password"], textarea {
+    width: 100%;
+    background: #0e1013;
+    border: 1px solid var(--panel-line);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 7px 10px;
+    outline: none;
+    border-radius: 0;
+  }
+  input[type="password"]:focus, textarea:focus {
+    border-color: var(--amber);
+  }
+  textarea { resize: vertical; min-height: 64px; line-height: 1.4; }
+
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 9px;
+    font-size: 11px;
+    color: var(--paper-dim);
+  }
+  .check-row input[type="checkbox"] {
+    appearance: none;
+    width: 13px; height: 13px;
+    border: 1px solid var(--panel-line);
+    background: #0e1013;
+    margin: 1px 0 0;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .check-row input[type="checkbox"]:checked { border-color: var(--amber); }
+  .check-row input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute; left: 3px; top: 1px;
+    width: 3px; height: 7px;
+    border: solid var(--amber);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .check-row label { cursor: pointer; }
+  .footnote {
+    font-size: 9.5px;
+    color: #94978f;
+    line-height: 1.4;
+    margin-top: 6px;
+  }
+
+  /* ── Mode toggle — flat tab strip, not rounded pill buttons ── */
+  .mode-strip { display: flex; border: 1px solid var(--panel-line); }
+  .mode-tab {
+    flex: 1;
+    text-align: center;
+    padding: 7px 8px;
+    font-family: var(--sign);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--paper-dim);
+    cursor: pointer;
+    border-right: 1px solid var(--panel-line);
+    user-select: none;
+  }
+  .mode-tab:last-child { border-right: none; }
+  .mode-tab.active { background: var(--amber); color: #14161a; }
+  .mode-note {
+    font-size: 10.5px;
+    color: var(--paper-dim);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+
+  .update-row {
+    display: none;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed var(--panel-line);
+  }
+
+  .img-drop {
+    border: 1px dashed var(--panel-line);
+    background: #0e1013;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--paper-dim);
+    font-size: 11px;
+  }
+  .img-drop:hover { border-color: var(--amber); color: var(--amber); }
+  .img-drop.has-image { cursor: default; }
+  .img-drop.has-image:hover { border-color: var(--panel-line); color: var(--paper-dim); }
+  #imgPreview {
+    max-width: 100%;
+    max-height: 140px;
+    display: block;
+    margin: 0 auto;
+  }
+  .img-remove {
+    display: block;
+    margin: 8px auto 0;
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    font-family: var(--sign);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .img-remove:hover { border-color: var(--hazard); color: var(--hazard); }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 10px; }
+  button.tx {
+    flex: 1;
+    background: var(--amber);
+    color: #14161a;
+    border: none;
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 9px;
+    cursor: pointer;
+  }
+  button.tx:hover { background: #ffc233; }
+  button.tx:disabled { background: var(--amber-dim); color: #444; cursor: not-allowed; }
+
+  /* ── Status readout — terminal-log style, not a rounded toast ── */
+  .log {
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 7px 10px;
+    border-left: 3px solid var(--panel-line);
+    display: none;
+    line-height: 1.4;
+  }
+  .log.show { display: block; }
+  .log.ok   { border-color: var(--ok);     color: var(--ok); }
+  .log.err  { border-color: var(--hazard); color: #e8734e; }
+  .log.busy { border-color: var(--amber);  color: var(--amber); }
+  .log::before { content: '> '; opacity: 0.6; }
+
+  /* ── On Air status value ── */
+  .val { color: var(--paper); line-height: 1.4; font-size: 11px; }
+  .val.none { color: #94978f; }
+  .flag { color: var(--amber); display: block; margin-top: 3px; font-size: 10px; }
+
+  .clear-small {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    font-family: var(--sign);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    cursor: pointer;
+  }
+  .clear-small:hover { border-color: var(--hazard); color: var(--hazard); }
+
+  .charcount {
+    text-align: right;
+    font-size: 10.5px;
+    color: #94978f;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="unit">RTMC <span>IT</span></div>
+    <div class="id">RANGER FLEET // BROADCAST CONSOLE</div>
+  </header>
+  <div class="subline">Message is pushed to every active Ranger laptop on its next check-in.</div>
+
+  <div class="token-set-strip" id="tokenSetStrip">
+    <span class="lit">TOKEN SET</span>
+    <button id="reopenToken">Change</button>
+  </div>
+
+  <div class="grid">
+    <div class="col-left">
+      <div class="panel" id="tokenPanel">
+        <div class="panel-head">Access</div>
+        <div class="panel-body">
+          <label class="field-label" for="token">GitHub Token</label>
+          <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+          <div class="check-row">
+            <input type="checkbox" id="rememberToken">
+            <label for="rememberToken">Keep token on this machine</label>
+          </div>
+          <div class="footnote">Sent directly to GitHub over HTTPS, never stored anywhere else. Token needs Contents: Read/Write on NEW-RANGER-LAPTOP-V2.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">Message</div>
+        <div class="panel-body">
+          <label class="field-label" for="msgText">Text</label>
+          <textarea id="msgText" maxlength="220" placeholder="Ice on bridges this morning — use caution"></textarea>
+          <div class="charcount"><span id="charCount">0</span>/220</div>
+
+          <label class="field-label" style="margin-top:10px;">Delivery</label>
+          <div class="mode-strip">
+            <div class="mode-tab active" id="tabBanner">Banner</div>
+            <div class="mode-tab" id="tabAlert">Alert</div>
+          </div>
+          <div class="mode-note" id="modeNote">Taskbar strip, no action needed.</div>
+
+          <div class="update-row" id="updateRow">
+            <label class="field-label" style="margin-top:0;">Image (optional)</label>
+            <input type="file" id="imageFile" accept="image/png,image/jpeg,image/webp" style="display:none;">
+            <div class="img-drop" id="imgDrop">
+              <span id="imgDropLabel">Click to attach a photo</span>
+              <img id="imgPreview" style="display:none;">
+              <button type="button" class="img-remove" id="imgRemove" style="display:none;">✕ Remove</button>
+            </div>
+            <div class="footnote">Resized automatically before sending. Shown large in the popup with your message as a caption underneath.</div>
+
+            <div class="check-row">
+              <input type="checkbox" id="showUpdateBtn">
+              <label for="showUpdateBtn">Include one-click "Update and Restart" on the alert</label>
+            </div>
+            <div class="footnote">Ranger updates and reboots immediately, no confirmation. Use for time-sensitive fixes only.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="tx" id="sendBtn">Transmit</button>
+      </div>
+
+      <div class="log" id="status"></div>
+    </div>
+
+    <div class="col-right">
+      <div class="panel">
+        <div class="panel-head">On Air</div>
+        <div class="panel-body">
+          <div class="on-air-row">
+            <span class="val none" id="currentVal">checking…</span>
+            <button class="clear-small" id="clearBtn">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">Quick Actions</div>
+        <div class="panel-body">
+          <button class="quick-btn" id="quickUpdateBtn">
+            Send Update Alert
+            <span class="qsub">Instant alert popup with one-click "Update and Restart" — fleet-wide</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const OWNER  = 'lucentRanger';
+const REPO   = 'NEW-RANGER-LAPTOP-V2';
+const PATH   = 'broadcast.json';
+const API    = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+
+const tokenEl       = document.getElementById('token');
+const rememberEl    = document.getElementById('rememberToken');
+const msgEl         = document.getElementById('msgText');
+const charCountEl   = document.getElementById('charCount');
+const sendBtn       = document.getElementById('sendBtn');
+const clearBtn      = document.getElementById('clearBtn');
+const statusEl      = document.getElementById('status');
+const currentVal    = document.getElementById('currentVal');
+const tabBanner     = document.getElementById('tabBanner');
+const tabAlert      = document.getElementById('tabAlert');
+const modeNote      = document.getElementById('modeNote');
+const updateRow     = document.getElementById('updateRow');
+const showUpdateBtn = document.getElementById('showUpdateBtn');
+const tokenPanel    = document.getElementById('tokenPanel');
+const tokenSetStrip = document.getElementById('tokenSetStrip');
+const reopenToken   = document.getElementById('reopenToken');
+const quickUpdateBtn = document.getElementById('quickUpdateBtn');
+const imageFile     = document.getElementById('imageFile');
+const imgDrop       = document.getElementById('imgDrop');
+const imgDropLabel  = document.getElementById('imgDropLabel');
+const imgPreview    = document.getElementById('imgPreview');
+const imgRemove     = document.getElementById('imgRemove');
+
+let selectedType = 'banner';
+
+const MODE_NOTES = {
+  banner: 'Taskbar strip, no action needed.',
+  alert:  'Full-screen popup, dismissed by hand.'
+};
+
+function collapseTokenPanel() {
+  tokenPanel.style.display = 'none';
+  tokenSetStrip.classList.add('show');
+}
+function expandTokenPanel() {
+  tokenPanel.style.display = 'block';
+  tokenSetStrip.classList.remove('show');
+  tokenEl.focus();
+}
+reopenToken.addEventListener('click', expandTokenPanel);
+
+// Collapse the token panel once a token is present and validated (on
+// blur, right after the existing-broadcast check succeeds) — folding a
+// working token out of the way instead of leaving a filled password
+// field sitting open indefinitely.
+const savedToken = localStorage.getItem('d7_broadcast_token');
+if (savedToken) {
+  tokenEl.value = savedToken;
+  rememberEl.checked = true;
+  collapseTokenPanel();
+}
+rememberEl.addEventListener('change', () => {
+  if (!rememberEl.checked) localStorage.removeItem('d7_broadcast_token');
+});
+
+msgEl.addEventListener('input', () => {
+  charCountEl.textContent = msgEl.value.length;
+});
+
+function setType(type) {
+  selectedType = type;
+  tabBanner.classList.toggle('active', type === 'banner');
+  tabAlert.classList.toggle('active', type === 'alert');
+  modeNote.textContent = MODE_NOTES[type];
+  const isAlert = type === 'alert';
+  updateRow.style.display = isAlert ? 'block' : 'none';
+  if (!isAlert) showUpdateBtn.checked = false;
+}
+tabBanner.addEventListener('click', () => setType('banner'));
+tabAlert.addEventListener('click', () => setType('alert'));
+
+// ── Image attach: resize/compress client-side before it ever touches
+// the network, so a phone photo (often 3-8MB) doesn't blow past GitHub's
+// API limits or make every laptop download something huge on its
+// 2-minute poll. Capped to a max dimension and re-encoded as PNG — NOT
+// JPEG, because the laptops display it via tkinter's native PhotoImage
+// (no Pillow installed on the kiosk Python), which can decode PNG/GIF
+// but not JPEG without an extra library none of the laptops have.
+let pendingImageDataUrl = null;   // resized image, ready to upload
+let pendingImageExt = 'png';
+
+const MAX_DIM = 1000;       // longest edge, px
+
+function resizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        if (width >= height) {
+          height = Math.round(height * (MAX_DIM / width));
+          width = MAX_DIM;
+        } else {
+          width = Math.round(width * (MAX_DIM / height));
+          height = MAX_DIM;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+imgDrop.addEventListener('click', () => {
+  if (!pendingImageDataUrl) imageFile.click();
+});
+
+imageFile.addEventListener('change', async () => {
+  const file = imageFile.files[0];
+  if (!file) return;
+  imgDropLabel.textContent = 'Processing…';
+  try {
+    pendingImageDataUrl = await resizeImage(file);
+    pendingImageExt = 'png';
+    imgPreview.src = pendingImageDataUrl;
+    imgPreview.style.display = 'block';
+    imgDropLabel.style.display = 'none';
+    imgRemove.style.display = 'block';
+    imgDrop.classList.add('has-image');
+  } catch (e) {
+    imgDropLabel.textContent = 'Click to attach a photo';
+    showStatus('err', 'COULD NOT READ IMAGE');
+  }
+});
+
+imgRemove.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  pendingImageDataUrl = null;
+  imageFile.value = '';
+  imgPreview.style.display = 'none';
+  imgPreview.src = '';
+  imgDropLabel.style.display = 'block';
+  imgDropLabel.textContent = 'Click to attach a photo';
+  imgRemove.style.display = 'none';
+  imgDrop.classList.remove('has-image');
+});
+
+// Switching back to Banner clears any attached image too, since images
+// are Alert-only — avoids silently carrying a hidden attachment into a
+// later Alert send that the tech never re-confirmed.
+const _origSetType = setType;
+setType = function(type) {
+  _origSetType(type);
+  if (type === 'banner' && pendingImageDataUrl) {
+    imgRemove.click();
+  }
+};
+
+
+function showStatus(kind, text) {
+  statusEl.className = `log show ${kind}`;
+  statusEl.textContent = text;
+}
+function hideStatus() { statusEl.className = 'log'; }
+
+function ghHeaders(token) {
+  return {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+}
+
+async function getCurrentFile(token) {
+  const res = await fetch(API, { headers: ghHeaders(token) });
+  if (res.status === 404) return { exists: false, sha: null, content: null };
+  if (!res.ok) throw new Error(`GITHUB ${res.status}: ${(await res.json()).message || 'unknown'}`);
+  const data = await res.json();
+  let content = null;
+  try { content = JSON.parse(decodeURIComponent(escape(atob(data.content)))); } catch (e) {}
+  return { exists: true, sha: data.sha, content };
+}
+
+async function putFile(token, sha, obj, commitMessage) {
+  const body = { message: commitMessage, content: btoa(unescape(encodeURIComponent(JSON.stringify(obj, null, 2)))) };
+  if (sha) body.sha = sha;
+  const res = await fetch(API, { method: 'PUT', headers: ghHeaders(token), body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`GITHUB ${res.status}: ${err.message || 'unknown'}`);
+  }
+  return res.json();
+}
+
+function makeId() {
+  const stamp = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  return `${stamp}-${Math.random().toString(36).slice(2,6)}`;
+}
+
+// Images are stored as their own file in broadcast-images/, not embedded
+// in broadcast.json — keeps the JSON small (laptops re-fetch it every 2
+// min) and avoids GitHub's Contents API size limits that a base64 photo
+// would risk tripping if it were embedded inline.
+//
+// Returns the repo-relative PATH, not a raw.githubusercontent.com URL —
+// that URL only works unauthenticated for public repos, and this repo
+// is private. statusbar.py fetches the image via the same authenticated
+// Contents API pattern it already uses for broadcast.json itself.
+async function uploadImage(token, dataUrl, id) {
+  const base64 = dataUrl.split(',')[1];
+  const path = `broadcast-images/${id}.png`;
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: ghHeaders(token),
+    body: JSON.stringify({
+      message: `Broadcast image ${id}`,
+      content: base64
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`IMAGE UPLOAD ${res.status}: ${err.message || 'unknown'}`);
+  }
+  return path;
+}
+
+async function refreshCurrent() {
+  const token = tokenEl.value.trim();
+  if (!token) {
+    currentVal.textContent = 'enter token to check';
+    currentVal.className = 'val none';
+    return;
+  }
+  try {
+    const { exists, content } = await getCurrentFile(token);
+    // A successful call (whether or not the file exists yet) confirms
+    // the token actually works — fold the access panel away at that
+    // point rather than leaving it expanded indefinitely.
+    collapseTokenPanel();
+    if (!exists || !content || !content.message) {
+      currentVal.textContent = 'nothing queued';
+      currentVal.className = 'val none';
+    } else {
+      const updateNote = content.show_update_button ? '  [+UPDATE BTN]' : '';
+      const imageNote = content.image_url ? '  [+IMAGE]' : '';
+      currentVal.innerHTML = `${content.type.toUpperCase()} — "${content.message.replace(/</g,'&lt;')}"` +
+        (updateNote ? `<span class="flag">${updateNote}</span>` : '') +
+        (imageNote ? `<span class="flag">${imageNote}</span>` : '');
+      currentVal.className = 'val';
+    }
+  } catch (e) {
+    currentVal.textContent = 'unable to check';
+    currentVal.className = 'val none';
+  }
+}
+
+async function transmitPayload(payload, commitLabel, busyBtn, imageDataUrl) {
+  hideStatus();
+  const token = tokenEl.value.trim();
+  if (!token) { showStatus('err', 'TOKEN REQUIRED'); return; }
+  if (rememberEl.checked) localStorage.setItem('d7_broadcast_token', token);
+
+  busyBtn.disabled = true;
+  try {
+    if (imageDataUrl) {
+      showStatus('busy', 'UPLOADING IMAGE…');
+      payload.image_url = await uploadImage(token, imageDataUrl, payload.id);
+    } else {
+      payload.image_url = '';
+    }
+    showStatus('busy', 'TRANSMITTING…');
+    const { sha } = await getCurrentFile(token);
+    await putFile(token, sha, payload, commitLabel);
+    showStatus('ok', 'SENT — fleet will pick this up within ~2 min');
+    if (imageDataUrl && pendingImageDataUrl) imgRemove.click();
+    await refreshCurrent();
+  } catch (e) {
+    showStatus('err', (e.message || 'TRANSMIT FAILED').toUpperCase());
+  } finally {
+    busyBtn.disabled = false;
+  }
+}
+
+sendBtn.addEventListener('click', () => {
+  const message = msgEl.value.trim();
+  if (!message) { hideStatus(); showStatus('err', 'MESSAGE IS EMPTY'); return; }
+  const payload = {
+    message,
+    type: selectedType,
+    id: makeId(),
+    show_update_button: (selectedType === 'alert' && showUpdateBtn.checked)
+  };
+  const imageToSend = (selectedType === 'alert') ? pendingImageDataUrl : null;
+  transmitPayload(payload, `Broadcast: ${message.slice(0,60)}`, sendBtn, imageToSend);
+});
+
+// Fixed one-click broadcast: fires an Alert popup with the Update and
+// Restart button already included, no typing required. Overwrites
+// whatever is currently on air, same as any other Transmit.
+const UPDATE_ALERT_TEXT = 'Important Update Available- Please click "Update and Restart"';
+quickUpdateBtn.addEventListener('click', () => {
+  const payload = {
+    message: UPDATE_ALERT_TEXT,
+    type: 'alert',
+    id: makeId(),
+    show_update_button: true,
+    image_url: ''
+  };
+  transmitPayload(payload, 'Broadcast: Update alert (quick action)', quickUpdateBtn, null);
+});
+
+clearBtn.addEventListener('click', async () => {
+  hideStatus();
+  const token = tokenEl.value.trim();
+  if (!token) { showStatus('err', 'TOKEN REQUIRED'); return; }
+  clearBtn.disabled = true;
+  showStatus('busy', 'CLEARING…');
+  try {
+    const { sha } = await getCurrentFile(token);
+    const payload = { message: '', type: 'banner', id: '', show_update_button: false, image_url: '' };
+    await putFile(token, sha, payload, 'Clear broadcast');
+    showStatus('ok', 'CLEARED');
+    msgEl.value = '';
+    charCountEl.textContent = '0';
+    if (pendingImageDataUrl) imgRemove.click();
+    await refreshCurrent();
+  } catch (e) {
+    showStatus('err', (e.message || 'CLEAR FAILED').toUpperCase());
+  } finally {
+    clearBtn.disabled = false;
+  }
+});
+
+tokenEl.addEventListener('blur', refreshCurrent);
+if (savedToken) refreshCurrent();
+</script>
+</body>
+</html>
