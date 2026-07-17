@@ -305,6 +305,111 @@
   }
   .img-remove:hover { border-color: var(--hazard); color: var(--hazard); }
 
+  /* ── Live preview mock — approximates the real statusbar.py alert
+     popup so techs can judge sizing before sending, without needing an
+     actual laptop to test on. The laptop frame itself is a FIXED 16:9
+     box that never changes size — only the popup inside it (and the
+     image inside that, at its own real aspect ratio) scales with the
+     slider, matching how it actually works on a real laptop screen. ── */
+  .preview-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+  }
+  .size-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .size-slider-row input[type="range"] {
+    width: 100px;
+    accent-color: var(--amber);
+  }
+  .size-label {
+    font-size: 9px;
+    color: var(--paper-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .mock-laptop {
+    margin-top: 8px;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 3px;
+    /* Fixed 16:9 frame — width fills the panel, height is derived from
+       that width via aspect-ratio, so the frame itself never grows or
+       shrinks regardless of popup/image size. */
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .mock-popup {
+    background: #0c141c;
+    border: 1px solid var(--amber);
+    width: 39.6%;              /* 760px real popup / 1920px reference screen — see MOCK_BASE_PCT in JS */
+    transition: width 0.15s ease;
+    font-family: var(--mono);
+  }
+  .mock-accent { height: 3px; background: var(--amber); }
+  .mock-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    background: #0a1017;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .mock-warn { color: var(--amber); font-size: 11px; }
+  .mock-unit { color: var(--paper); font-size: 10px; font-weight: 700; font-family: var(--sign); }
+  .mock-time { margin-left: auto; color: var(--paper-dim); font-size: 8px; }
+  .mock-body { padding: 10px; text-align: center; }
+  .mock-img-wrap {
+    background: #1a1d22;
+    border: 1px dashed var(--panel-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  /* object-fit: contain (not cover) + no forced height — the wrap sizes
+     to the image's own real aspect ratio via the <img>'s natural
+     width/height, so a square photo stays square and a 16:9 photo stays
+     16:9, instead of being stretched or cropped into a fixed box. */
+  .mock-img-wrap img {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+  .mock-caption {
+    color: var(--paper-dim);
+    font-size: 9px;
+    line-height: 1.4;
+    text-align: left;
+  }
+  .mock-footer {
+    padding: 8px 10px;
+    border-top: 1px solid var(--panel-line);
+    text-align: center;
+  }
+  .mock-btn-close {
+    background: var(--amber);
+    color: #14161a;
+    border: none;
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    cursor: default;
+  }
+
   /* ── Buttons ── */
   .btn-row { display: flex; gap: 10px; }
   button.tx {
@@ -419,6 +524,35 @@
             </div>
             <div class="footnote">Resized automatically before sending. Shown large in the popup with your message as a caption underneath.</div>
 
+            <div class="preview-toggle-row">
+              <label class="field-label" style="margin:0;">Live Preview</label>
+              <div class="size-slider-row">
+                <span class="size-label">Small</span>
+                <input type="range" id="previewSize" min="60" max="140" value="100" step="5">
+                <span class="size-label">Large</span>
+              </div>
+            </div>
+            <div class="mock-laptop">
+              <div class="mock-popup" id="mockPopup">
+                <div class="mock-accent"></div>
+                <div class="mock-header">
+                  <span class="mock-warn">⚠</span>
+                  <span class="mock-unit">RTMC IT</span>
+                  <span class="mock-time" id="mockTime">11:20 AM</span>
+                </div>
+                <div class="mock-body">
+                  <div class="mock-img-wrap" id="mockImgWrap" style="display:none;">
+                    <img id="mockImg">
+                  </div>
+                  <div class="mock-caption" id="mockCaption">Your message will appear here.</div>
+                </div>
+                <div class="mock-footer">
+                  <button type="button" class="mock-btn-close">Close</button>
+                </div>
+              </div>
+            </div>
+            <div class="footnote">Approximates the real popup on a 1920×1080 laptop screen. Drag the slider to check how a larger or smaller image will look before sending.</div>
+
             <div class="check-row">
               <input type="checkbox" id="showUpdateBtn">
               <label for="showUpdateBtn">Include one-click "Update and Restart" on the alert</label>
@@ -488,8 +622,21 @@ const imgDrop       = document.getElementById('imgDrop');
 const imgDropLabel  = document.getElementById('imgDropLabel');
 const imgPreview    = document.getElementById('imgPreview');
 const imgRemove     = document.getElementById('imgRemove');
+const mockPopup     = document.getElementById('mockPopup');
+const mockImgWrap   = document.getElementById('mockImgWrap');
+const mockImg       = document.getElementById('mockImg');
+const mockCaption   = document.getElementById('mockCaption');
+const mockTime      = document.getElementById('mockTime');
+const previewSize   = document.getElementById('previewSize');
 
 let selectedType = 'banner';
+
+// Declared here (not down near the image-handling code below) because
+// updateMockPreview() runs immediately at load time and reads this
+// variable — with `let`, referencing it before its declaration line
+// throws a ReferenceError, which would break the entire page.
+let pendingImageDataUrl = null;   // resized image, ready to upload
+let pendingImageExt = 'png';
 
 const MODE_NOTES = {
   banner: 'Taskbar strip, no action needed.',
@@ -523,7 +670,51 @@ rememberEl.addEventListener('change', () => {
 
 msgEl.addEventListener('input', () => {
   charCountEl.textContent = msgEl.value.length;
+  updateMockPreview();
 });
+
+// ── Live preview mock — mirrors statusbar.py's real alert popup sizing,
+// scaled against a 1920px-wide reference (matching a real 1920x1080
+// laptop screen). The real popup is up to 760px wide at max image size
+// (ALERT_W in statusbar.py) — 760/1920 = 39.6% of screen width, which is
+// MOCK_BASE_PCT at the slider's 100% (default) position. The laptop
+// frame itself is a FIXED 16:9 box (via CSS aspect-ratio) that never
+// resizes; only the popup's width inside it changes with the slider,
+// and any attached image keeps its own real aspect ratio via
+// object-fit:contain rather than being stretched to fit a fixed box.
+const MOCK_BASE_PCT = 39.6;
+
+function updateMockTime() {
+  const now = new Date();
+  let h = now.getHours() % 12 || 12;
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const ap = now.getHours() < 12 ? 'AM' : 'PM';
+  mockTime.textContent = `${h}:${m} ${ap}`;
+}
+updateMockTime();
+setInterval(updateMockTime, 30000);
+
+function updateMockPreview() {
+  const text = msgEl.value.trim();
+  mockCaption.textContent = text || 'Your message will appear here.';
+
+  // Only the popup's width (as a % of the fixed 16:9 laptop frame)
+  // changes with the slider — the frame itself is a fixed size via CSS
+  // aspect-ratio, and the image inside keeps its own real aspect ratio
+  // via object-fit:contain, so a square photo stays square and a wide
+  // photo stays wide instead of being stretched into a fixed box.
+  const scale = parseInt(previewSize.value, 10) / 100;
+  mockPopup.style.width = (MOCK_BASE_PCT * scale) + '%';
+
+  if (pendingImageDataUrl) {
+    mockImg.src = pendingImageDataUrl;
+    mockImgWrap.style.display = 'flex';
+  } else {
+    mockImgWrap.style.display = 'none';
+  }
+}
+previewSize.addEventListener('input', updateMockPreview);
+updateMockPreview();
 
 function setType(type) {
   selectedType = type;
@@ -544,9 +735,6 @@ tabAlert.addEventListener('click', () => setType('alert'));
 // JPEG, because the laptops display it via tkinter's native PhotoImage
 // (no Pillow installed on the kiosk Python), which can decode PNG/GIF
 // but not JPEG without an extra library none of the laptops have.
-let pendingImageDataUrl = null;   // resized image, ready to upload
-let pendingImageExt = 'png';
-
 const MAX_DIM = 1000;       // longest edge, px
 
 function resizeImage(file) {
@@ -594,6 +782,7 @@ imageFile.addEventListener('change', async () => {
     imgDropLabel.style.display = 'none';
     imgRemove.style.display = 'block';
     imgDrop.classList.add('has-image');
+    updateMockPreview();
   } catch (e) {
     imgDropLabel.textContent = 'Click to attach a photo';
     showStatus('err', 'COULD NOT READ IMAGE');
@@ -610,6 +799,7 @@ imgRemove.addEventListener('click', (ev) => {
   imgDropLabel.textContent = 'Click to attach a photo';
   imgRemove.style.display = 'none';
   imgDrop.classList.remove('has-image');
+  updateMockPreview();
 });
 
 // Switching back to Banner clears any attached image too, since images
