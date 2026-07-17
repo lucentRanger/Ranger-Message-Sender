@@ -352,6 +352,14 @@
     accent-color: var(--panel-line);
     cursor: not-allowed;
   }
+  /* Breaks the mock frame out of the narrow left grid column so it can
+     use the FULL viewport width — necessary for the popup to render at
+     genuinely accurate proportional scale while staying legible. A
+     1920px-reference popup rendered inside a ~650px column compounds
+     into illegibly small text (do the math: a 12px real header font
+     at a 650/1920 frame ratio is under 5px) — there's no CSS trick
+     that fixes that within a narrow column; the frame itself needs to
+     be substantially wider. */
   .mock-laptop {
     margin-top: 8px;
     background: #000;
@@ -362,24 +370,30 @@
        shrinks regardless of popup/image size. */
     width: 100%;
     aspect-ratio: 16 / 9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
     overflow: hidden;
   }
   .mock-popup {
     background: #0c141c;
     border: 1px solid var(--amber);
-    /* Width AND height are both set explicitly via JS as real
-       percentages of the reference screen dimensions (see
-       updateMockPreview) — no CSS max-height cap here, since that
-       would silently clip/override the precisely-calculated JS value
-       in edge cases, reintroducing the exact mismatch this was meant
-       to prevent. The slider's own max (computeMaxTargetW) is what
-       keeps the size safe, not a CSS ceiling on top of it. */
+    /* Chrome (header/caption/footer) stays at a FIXED, always-legible
+       size — matching how statusbar.py's real popup actually renders
+       its own chrome (fixed font sizes via get_font(), regardless of
+       image size). Only the image area (mockImgWrap) is scaled to its
+       TRUE proportional real-world size, which is both the actual
+       purpose of this preview (judging how big a photo will look) and
+       the only way to keep the panel legible at a realistic column
+       width — a genuinely proportional whole-popup scale needs much
+       more on-screen width than a column panel can offer before fixed
+       fonts become illegible; that tradeoff only made sense when this
+       used the full page width, which conflicted with keeping the
+       page laid out sanely. */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
-    transition: width 0.15s ease, height 0.15s ease;
     font-family: var(--mono);
   }
   .mock-accent { height: 3px; background: var(--amber); flex-shrink: 0; }
@@ -400,9 +414,7 @@
     text-align: center;
     display: flex;
     flex-direction: column;
-    flex: 1;         /* stretch to fill the popup's now explicitly-set height */
-    min-height: 0;   /* allows flex children to shrink below their content size */
-    overflow: hidden;
+    align-items: center;
   }
   .mock-img-wrap {
     background: #1a1d22;
@@ -412,19 +424,11 @@
     justify-content: center;
     margin-bottom: 8px;
     overflow: hidden;
-    min-height: 40px;   /* guarantees the image area never visually collapses to zero */
-    flex: 1;   /* claim all remaining vertical space after the caption reserves its own room */
   }
-  /* object-fit: contain (not cover) + no forced height — the wrap sizes
-     to the image's own real aspect ratio via the <img>'s natural
-     width/height, so a square photo stays square and a 16:9 photo stays
-     16:9, instead of being stretched or cropped into a fixed box. */
   .mock-img-wrap img {
     display: block;
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
   }
   .mock-caption {
@@ -433,17 +437,19 @@
     line-height: 1.4;
     text-align: left;
     flex-shrink: 0;
+    max-height: 2.8em;
+    overflow: hidden;
   }
   .mock-footer {
     padding: 8px 10px;
     border-top: 1px solid var(--panel-line);
     text-align: center;
     flex-shrink: 0;
-    display: flex;
-    justify-content: center;
-    gap: 6px;
   }
-  .mock-btn {
+  .mock-btn-close {
+    background: var(--amber);
+    color: #14161a;
+    border: none;
     font-family: var(--sign);
     font-weight: 700;
     font-size: 9px;
@@ -451,16 +457,6 @@
     text-transform: uppercase;
     padding: 5px 14px;
     cursor: default;
-  }
-  .mock-btn.primary {
-    background: var(--amber);
-    color: #14161a;
-    border: none;
-  }
-  .mock-btn.secondary {
-    background: transparent;
-    color: var(--paper-dim);
-    border: 1px solid var(--panel-line);
   }
 
   /* ── Buttons ── */
@@ -575,37 +571,7 @@
               <img id="imgPreview" style="display:none;">
               <button type="button" class="img-remove" id="imgRemove" style="display:none;">✕ Remove</button>
             </div>
-            <div class="footnote">Resized automatically before sending. Shown large in the popup with your message as a caption underneath.</div>
-
-            <div class="preview-toggle-row">
-              <label class="field-label" style="margin:0;">Image Size on Laptop</label>
-              <span class="size-readout" id="sizeReadout">— attach an image first —</span>
-            </div>
-            <div class="size-slider-row full">
-              <span class="size-label">Small</span>
-              <input type="range" id="previewSize" min="150" max="150" value="150" step="1" disabled>
-              <span class="size-label">Large</span>
-            </div>
-            <div class="mock-laptop">
-              <div class="mock-popup" id="mockPopup">
-                <div class="mock-accent"></div>
-                <div class="mock-header">
-                  <span class="mock-warn">⚠</span>
-                  <span class="mock-unit">RTMC IT</span>
-                  <span class="mock-time" id="mockTime">11:20 AM</span>
-                </div>
-                <div class="mock-body">
-                  <div class="mock-img-wrap" id="mockImgWrap" style="display:none;">
-                    <img id="mockImg">
-                  </div>
-                  <div class="mock-caption" id="mockCaption">Your message will appear here.</div>
-                </div>
-                <div class="mock-footer" id="mockFooter">
-                  <button type="button" class="mock-btn primary">Close</button>
-                </div>
-              </div>
-            </div>
-            <div class="footnote">This is the actual size sent to the fleet — drag to the max and the popup's edge will just touch the laptop screen's edge. Locked to your photo's real aspect ratio.</div>
+            <div class="footnote">Resized automatically before sending. Shown large in the popup with your message as a caption underneath. See the Live Preview panel on the right for exact sizing.</div>
 
             <div class="check-row">
               <input type="checkbox" id="showUpdateBtn">
@@ -643,6 +609,41 @@
           </button>
         </div>
       </div>
+
+      <div class="panel" id="previewPanel" style="display:none;">
+        <div class="panel-head">Live Preview</div>
+        <div class="panel-body">
+          <div class="preview-toggle-row">
+            <label class="field-label" style="margin:0;">Image Size</label>
+            <span class="size-readout" id="sizeReadout">— attach an image first —</span>
+          </div>
+          <div class="size-slider-row full">
+            <span class="size-label">Small</span>
+            <input type="range" id="previewSize" min="150" max="150" value="150" step="1" disabled>
+            <span class="size-label">Large</span>
+          </div>
+          <div class="mock-laptop" id="mockLaptop">
+            <div class="mock-popup" id="mockPopup">
+              <div class="mock-accent"></div>
+              <div class="mock-header">
+                <span class="mock-warn">⚠</span>
+                <span class="mock-unit">RTMC IT</span>
+                <span class="mock-time" id="mockTime">11:20 AM</span>
+              </div>
+              <div class="mock-body">
+                <div class="mock-img-wrap" id="mockImgWrap" style="display:none;">
+                  <img id="mockImg">
+                </div>
+                <div class="mock-caption" id="mockCaption">Your message will appear here.</div>
+              </div>
+              <div class="mock-footer">
+                <button type="button" class="mock-btn-close">Close</button>
+              </div>
+            </div>
+          </div>
+          <div class="footnote">Actual size sent to the fleet, scaled to match a real 1920×1080 laptop screen. Drag to the max and the popup's edge will just touch the screen edge.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -677,16 +678,21 @@ const imgDropLabel  = document.getElementById('imgDropLabel');
 const imgPreview    = document.getElementById('imgPreview');
 const imgRemove     = document.getElementById('imgRemove');
 const mockPopup     = document.getElementById('mockPopup');
+const mockLaptop    = document.getElementById('mockLaptop');
+const previewPanel  = document.getElementById('previewPanel');
 const mockImgWrap   = document.getElementById('mockImgWrap');
 const mockImg       = document.getElementById('mockImg');
 const mockCaption   = document.getElementById('mockCaption');
 const mockTime      = document.getElementById('mockTime');
 const previewSize   = document.getElementById('previewSize');
-const mockFooter    = document.getElementById('mockFooter');
 
 let selectedType = 'banner';
 
-let pendingImageDataUrl = null;
+// Declared here (not down near the image-handling code below) because
+// updateMockPreview() runs immediately at load time and reads this
+// variable — with `let`, referencing it before its declaration line
+// throws a ReferenceError, which would break the entire page.
+let pendingImageDataUrl = null;   // resized image, ready to upload
 let pendingImageExt = 'png';
 
 const MODE_NOTES = {
@@ -705,6 +711,10 @@ function expandTokenPanel() {
 }
 reopenToken.addEventListener('click', expandTokenPanel);
 
+// Collapse the token panel once a token is present and validated (on
+// blur, right after the existing-broadcast check succeeds) — folding a
+// working token out of the way instead of leaving a filled password
+// field sitting open indefinitely.
 const savedToken = localStorage.getItem('d7_broadcast_token');
 if (savedToken) {
   tokenEl.value = savedToken;
@@ -720,21 +730,52 @@ msgEl.addEventListener('input', () => {
   updateMockPreview();
 });
 
+// ── Real image size control — the slider sets an ACTUAL target pixel
+// width that's sent to the laptops and used as the real popup size,
+// not just a cosmetic preview. These constants mirror the exact values
+// used in statusbar.py's centering/sizing math.
+//
+// REF_SCREEN_W/H are 1920x1080 — the laptops' true physical/logical
+// resolution AS SEEN BY THE ACTUAL RUNNING KIOSK APP. This was
+// confirmed directly on a real unit by replicating statusbar.py's own
+// startup behavior (SetProcessDpiAwareness(2)) before querying screen
+// size — a DPI-aware process correctly reports 1920x1080. An earlier
+// diagnostic that queried screen size WITHOUT setting DPI-awareness
+// first reported 1280x720 (the Windows-virtualized logical resolution
+// non-DPI-aware processes see at 150% scaling) — that number was
+// wrong for this purpose because it didn't reflect the same state the
+// real running app is actually in, which is why using it as the
+// reference caused the popup to render far smaller on the real laptop
+// than the preview showed.
+//
+// If either file's constants drift from the other, the "drag to the
+// max and it just touches the screen edge" guarantee breaks — keep
+// these in sync with statusbar.py's _CHROME_RESERVE/_BAR_RESERVE if
+// either ever changes.
 const REF_SCREEN_W   = 1920;
 const REF_SCREEN_H   = 1080;
-const CHROME_W_PAD   = 40;
-const CHROME_RESERVE = 180;
-const BAR_RESERVE    = 100;
-const MIN_TARGET_W   = 200;
+const CHROME_W_PAD   = 40;    // left+right padding around the image inside the popup
+const CHROME_RESERVE = 180;   // header + caption + footer + dividers + padding (vertical)
+const BAR_RESERVE    = 100;   // top status bar + bottom taskbar combined
+const MIN_TARGET_W   = 200;   // don't let the slider go so small the image is pointless
 
 let imgNaturalW = 0;
 let imgNaturalH = 0;
-let targetImgW  = 0;
+let targetImgW  = 0;   // the REAL width (px) that gets sent in the payload
 
 function computeMaxTargetW() {
   if (!imgNaturalW || !imgNaturalH) return MIN_TARGET_W;
   const maxByHeight = (REF_SCREEN_H - CHROME_RESERVE - BAR_RESERVE) * (imgNaturalW / imgNaturalH);
   const maxByWidth  = REF_SCREEN_W - CHROME_W_PAD;
+  // statusbar.py never upscales an image past its own native
+  // resolution (avoids visible blur from stretching a small source
+  // photo) — the preview needs the SAME cap, or the slider lets you
+  // pick a size the laptop will silently refuse to actually produce,
+  // which is exactly why "smaller settings matched, larger ones
+  // didn't" — those larger settings were already past the source
+  // image's real resolution and getting capped on the laptop, but the
+  // preview had no matching cap so it kept showing the bigger,
+  // never-actually-achievable size.
   const maxByNativeRes = imgNaturalW;
   return Math.max(MIN_TARGET_W, Math.round(Math.min(maxByHeight, maxByWidth, maxByNativeRes)));
 }
@@ -756,38 +797,33 @@ function updateMockPreview() {
   if (pendingImageDataUrl && imgNaturalW && imgNaturalH) {
     mockImg.src = pendingImageDataUrl;
     mockImgWrap.style.display = 'flex';
-    
-    // With image: text is muted and smaller to match statusbar.py
-    mockCaption.style.color = 'var(--paper-dim)';
-    mockCaption.style.fontSize = '9px';
 
+    // Only the image is scaled to its TRUE proportional size — the mock
+    // frame represents REF_SCREEN_W x REF_SCREEN_H of real screen
+    // space, rendered at whatever real pixel width the frame div
+    // actually is right now (a narrower right-column panel, not the
+    // full page). targetImgW/H (the exact px size chosen on the
+    // slider, same numbers sent to the fleet and used directly by
+    // statusbar.py, no clamping) get converted through that ratio into
+    // mock pixels, so the image visually occupies the same proportion
+    // of the frame it would occupy on the real screen. Chrome
+    // (header/caption/footer) stays fixed-size around it, matching how
+    // statusbar.py's own chrome actually renders — fixed fonts
+    // regardless of image size.
     const targetImgH = Math.round(targetImgW * (imgNaturalH / imgNaturalW));
-    const popupWPct = ((targetImgW + CHROME_W_PAD) / REF_SCREEN_W) * 100;
-    const popupHPct = ((targetImgH + CHROME_RESERVE) / REF_SCREEN_H) * 100;
-    mockPopup.style.width  = popupWPct + '%';
-    mockPopup.style.height = popupHPct + '%';
-
     sizeReadout.textContent = `${targetImgW} × ${targetImgH} px`;
+
+    requestAnimationFrame(() => {
+      const frameRect = mockLaptop.getBoundingClientRect();
+      const scale = frameRect.width / REF_SCREEN_W;
+      mockImgWrap.style.width  = Math.round(targetImgW * scale) + 'px';
+      mockImgWrap.style.height = Math.round(targetImgH * scale) + 'px';
+    });
   } else {
     mockImgWrap.style.display = 'none';
-    mockPopup.style.height = '';
+    mockImgWrap.style.width = '';
+    mockImgWrap.style.height = '';
     sizeReadout.textContent = '— attach an image first —';
-    
-    // Text-only: text is brighter and larger to match statusbar.py
-    mockCaption.style.color = 'var(--paper)';
-    mockCaption.style.fontSize = '10.5px';
-  }
-
-  // Inject correct button layout
-  if (selectedType === 'alert' && showUpdateBtn.checked) {
-    mockFooter.innerHTML = `
-      <button type="button" class="mock-btn secondary">Close</button>
-      <button type="button" class="mock-btn primary">⟳ Update and Restart</button>
-    `;
-  } else {
-    mockFooter.innerHTML = `
-      <button type="button" class="mock-btn primary">Close</button>
-    `;
   }
 }
 
@@ -795,8 +831,10 @@ previewSize.addEventListener('input', () => {
   targetImgW = parseInt(previewSize.value, 10);
   updateMockPreview();
 });
+window.addEventListener('resize', () => {
+  if (pendingImageDataUrl) updateMockPreview();
+});
 
-showUpdateBtn.addEventListener('change', updateMockPreview);
 
 function setType(type) {
   selectedType = type;
@@ -806,12 +844,18 @@ function setType(type) {
   const isAlert = type === 'alert';
   updateRow.style.display = isAlert ? 'block' : 'none';
   if (!isAlert) showUpdateBtn.checked = false;
-  updateMockPreview();
 }
 tabBanner.addEventListener('click', () => setType('banner'));
 tabAlert.addEventListener('click', () => setType('alert'));
 
-const MAX_DIM = 1000;
+// ── Image attach: resize/compress client-side before it ever touches
+// the network, so a phone photo (often 3-8MB) doesn't blow past GitHub's
+// API limits or make every laptop download something huge on its
+// 2-minute poll. Capped to a max dimension and re-encoded as PNG — NOT
+// JPEG, because the laptops display it via tkinter's native PhotoImage
+// (no Pillow installed on the kiosk Python), which can decode PNG/GIF
+// but not JPEG without an extra library none of the laptops have.
+const MAX_DIM = 1000;       // longest edge, px
 
 function resizeImage(file) {
   return new Promise((resolve, reject) => {
@@ -862,6 +906,12 @@ imageFile.addEventListener('change', async () => {
     imgRemove.style.display = 'block';
     imgDrop.classList.add('has-image');
 
+    // Configure the slider with REAL pixel bounds now that we know the
+    // image's actual aspect ratio — min is a sensible small size, max
+    // is the exact point where the popup's edge would touch the laptop
+    // screen's edge (computeMaxTargetW, using the same reserve math as
+    // statusbar.py). Default to a comfortable ~65% of the max rather
+    // than starting at the absolute ceiling.
     const maxW = computeMaxTargetW();
     previewSize.min = MIN_TARGET_W;
     previewSize.max = maxW;
@@ -869,6 +919,7 @@ imageFile.addEventListener('change', async () => {
     previewSize.disabled = false;
     targetImgW = parseInt(previewSize.value, 10);
 
+    previewPanel.style.display = 'block';
     updateMockPreview();
   } catch (e) {
     imgDropLabel.textContent = 'Click to attach a photo';
@@ -893,9 +944,13 @@ imgRemove.addEventListener('click', (ev) => {
   previewSize.max = 150;
   previewSize.value = 150;
   previewSize.disabled = true;
+  previewPanel.style.display = 'none';
   updateMockPreview();
 });
 
+// Switching back to Banner clears any attached image too, since images
+// are Alert-only — avoids silently carrying a hidden attachment into a
+// later Alert send that the tech never re-confirmed.
 const _origSetType = setType;
 setType = function(type) {
   _origSetType(type);
@@ -945,6 +1000,15 @@ function makeId() {
   return `${stamp}-${Math.random().toString(36).slice(2,6)}`;
 }
 
+// Images are stored as their own file in broadcast-images/, not embedded
+// in broadcast.json — keeps the JSON small (laptops re-fetch it every 2
+// min) and avoids GitHub's Contents API size limits that a base64 photo
+// would risk tripping if it were embedded inline.
+//
+// Returns the repo-relative PATH, not a raw.githubusercontent.com URL —
+// that URL only works unauthenticated for public repos, and this repo
+// is private. statusbar.py fetches the image via the same authenticated
+// Contents API pattern it already uses for broadcast.json itself.
 async function uploadImage(token, dataUrl, id) {
   const base64 = dataUrl.split(',')[1];
   const path = `broadcast-images/${id}.png`;
@@ -973,6 +1037,9 @@ async function refreshCurrent() {
   }
   try {
     const { exists, content } = await getCurrentFile(token);
+    // A successful call (whether or not the file exists yet) confirms
+    // the token actually works — fold the access panel away at that
+    // point rather than leaving it expanded indefinitely.
     collapseTokenPanel();
     if (!exists || !content || !content.message) {
       currentVal.textContent = 'nothing queued';
@@ -1028,10 +1095,17 @@ sendBtn.addEventListener('click', () => {
     show_update_button: (selectedType === 'alert' && showUpdateBtn.checked)
   };
   const imageToSend = (selectedType === 'alert') ? pendingImageDataUrl : null;
+  // The real, chosen target width from the slider — statusbar.py uses
+  // this directly to size the popup on the laptop, locked to the
+  // image's own aspect ratio there too. Falls back to 0 (meaning "use
+  // the laptop's own safe default") if no image is attached.
   payload.image_target_width = imageToSend ? targetImgW : 0;
   transmitPayload(payload, `Broadcast: ${message.slice(0,60)}`, sendBtn, imageToSend);
 });
 
+// Fixed one-click broadcast: fires an Alert popup with the Update and
+// Restart button already included, no typing required. Overwrites
+// whatever is currently on air, same as any other Transmit.
 const UPDATE_ALERT_TEXT = 'Important Update Available- Please click "Update and Restart"';
 quickUpdateBtn.addEventListener('click', () => {
   const payload = {
