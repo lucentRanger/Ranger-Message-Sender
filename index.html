@@ -719,14 +719,28 @@ msgEl.addEventListener('input', () => {
 // ── Real image size control — the slider sets an ACTUAL target pixel
 // width that's sent to the laptops and used as the real popup size,
 // not just a cosmetic preview. These constants mirror the exact values
-// used in statusbar.py's centering/sizing math (ALERT_W chrome padding,
-// header/caption/footer/border reserve, and the 1920x1080 reference
-// screen) — if either file's constants drift from the other, the "drag
-// to the max and it just touches the screen edge" guarantee breaks, so
-// keep these in sync with statusbar.py's _CHROME_RESERVE/_BAR_RESERVE
-// if either ever changes.
-const REF_SCREEN_W   = 1920;
-const REF_SCREEN_H   = 1080;
+// used in statusbar.py's centering/sizing math.
+//
+// REF_SCREEN_W/H are deliberately set to 1280x720, NOT 1920x1080 —
+// these laptops run Windows at 150% display scaling, which means a
+// physical 1920x1080 panel reports its LOGICAL resolution to every
+// application (including this one and statusbar.py) as 1280x720
+// (confirmed directly on a real unit via GetSystemMetrics/Tk queries,
+// which agreed with each other exactly). Using 1920x1080 as the
+// reference previously let the slider's calculated "max" be nearly
+// double what that laptop could actually display without overshooting
+// the screen — this is the actual fix for that, not a coordinate-space
+// mismatch as originally suspected. If a laptop's real logical
+// resolution is larger than this reference, the tool is simply
+// conservative there (unused headroom, not a problem); it can never be
+// unsafe on a smaller one, which is the failure mode that matters.
+//
+// If either file's constants drift from the other, the "drag to the
+// max and it just touches the screen edge" guarantee breaks — keep
+// these in sync with statusbar.py's _CHROME_RESERVE/_BAR_RESERVE if
+// either ever changes.
+const REF_SCREEN_W   = 1280;
+const REF_SCREEN_H   = 720;
 const CHROME_W_PAD   = 40;    // left+right padding around the image inside the popup
 const CHROME_RESERVE = 180;   // header + caption + footer + dividers + padding (vertical)
 const BAR_RESERVE    = 100;   // top status bar + bottom taskbar combined
