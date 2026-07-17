@@ -754,7 +754,17 @@ function computeMaxTargetW() {
   if (!imgNaturalW || !imgNaturalH) return MIN_TARGET_W;
   const maxByHeight = (REF_SCREEN_H - CHROME_RESERVE - BAR_RESERVE) * (imgNaturalW / imgNaturalH);
   const maxByWidth  = REF_SCREEN_W - CHROME_W_PAD;
-  return Math.max(MIN_TARGET_W, Math.round(Math.min(maxByHeight, maxByWidth)));
+  // statusbar.py never upscales an image past its own native
+  // resolution (avoids visible blur from stretching a small source
+  // photo) — the preview needs the SAME cap, or the slider lets you
+  // pick a size the laptop will silently refuse to actually produce,
+  // which is exactly why "smaller settings matched, larger ones
+  // didn't" — those larger settings were already past the source
+  // image's real resolution and getting capped on the laptop, but the
+  // preview had no matching cap so it kept showing the bigger,
+  // never-actually-achievable size.
+  const maxByNativeRes = imgNaturalW;
+  return Math.max(MIN_TARGET_W, Math.round(Math.min(maxByHeight, maxByWidth, maxByNativeRes)));
 }
 
 function updateMockTime() {
