@@ -351,11 +351,20 @@
     background: #0c141c;
     border: 1px solid var(--amber);
     width: 39.6%;              /* 760px real popup / 1920px reference screen — see MOCK_BASE_PCT in JS */
+    /* Mirrors the real screen-relative safety clamp in statusbar.py:
+       the popup can never exceed a safe fraction of the frame's height,
+       so the preview can't show a size the real laptop wouldn't
+       actually allow (previously the slider could push a square image
+       edge-to-edge vertically, which the real popup's clamp prevents). */
+    max-height: 82%;
+    display: flex;
+    flex-direction: column;
     transition: width 0.15s ease;
     font-family: var(--mono);
   }
-  .mock-accent { height: 3px; background: var(--amber); }
+  .mock-accent { height: 3px; background: var(--amber); flex-shrink: 0; }
   .mock-header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -366,7 +375,14 @@
   .mock-warn { color: var(--amber); font-size: 11px; }
   .mock-unit { color: var(--paper); font-size: 10px; font-weight: 700; font-family: var(--sign); }
   .mock-time { margin-left: auto; color: var(--paper-dim); font-size: 8px; }
-  .mock-body { padding: 10px; text-align: center; }
+  .mock-body {
+    padding: 10px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;   /* allows flex children to shrink below their content size */
+    overflow: hidden;
+  }
   .mock-img-wrap {
     background: #1a1d22;
     border: 1px dashed var(--panel-line);
@@ -375,6 +391,8 @@
     justify-content: center;
     margin-bottom: 8px;
     overflow: hidden;
+    min-height: 0;
+    flex-shrink: 1;
   }
   /* object-fit: contain (not cover) + no forced height — the wrap sizes
      to the image's own real aspect ratio via the <img>'s natural
@@ -382,7 +400,9 @@
      16:9, instead of being stretched or cropped into a fixed box. */
   .mock-img-wrap img {
     display: block;
-    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
     height: auto;
     object-fit: contain;
   }
@@ -391,11 +411,13 @@
     font-size: 9px;
     line-height: 1.4;
     text-align: left;
+    flex-shrink: 0;
   }
   .mock-footer {
     padding: 8px 10px;
     border-top: 1px solid var(--panel-line);
     text-align: center;
+    flex-shrink: 0;
   }
   .mock-btn-close {
     background: var(--amber);
