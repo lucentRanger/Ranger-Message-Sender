@@ -178,6 +178,19 @@
     margin-top: 3px;
   }
 
+  /* ── Secondary (outline) quick button — used for History, which
+     opens a viewer rather than transmitting anything, so it's kept
+     visually distinct from the amber "this sends something" buttons. ── */
+  .quick-btn.outline {
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--steel);
+    box-shadow: none;
+    margin-top: 8px;
+  }
+  .quick-btn.outline:hover { border-color: var(--amber); color: var(--amber); background: transparent; }
+  .quick-btn.outline .qsub { color: var(--paper-dim); }
+
   label.field-label {
     display: block;
     font-size: 10px;
@@ -518,6 +531,119 @@
     color: #94978f;
     margin-top: 4px;
   }
+
+  /* ── History modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,11,13,0.72);
+    z-index: 100;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--asphalt-2);
+    border: 1px solid var(--amber);
+    width: 100%;
+    max-width: 640px;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--panel-line);
+    flex-shrink: 0;
+  }
+  .modal-title {
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--paper);
+  }
+  .modal-close {
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    font-family: var(--sign);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    cursor: pointer;
+  }
+  .modal-close:hover { border-color: var(--hazard); color: var(--hazard); }
+  .modal-body {
+    padding: 10px 14px 14px;
+    overflow-y: auto;
+  }
+  .hist-empty {
+    color: var(--paper-dim);
+    font-size: 11px;
+    padding: 20px 4px;
+    text-align: center;
+  }
+  .hist-item {
+    border: 1px solid var(--panel-line);
+    border-left: 3px solid var(--panel-line);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    font-size: 11.5px;
+  }
+  .hist-item.type-alert  { border-left-color: var(--amber); }
+  .hist-item.type-banner { border-left-color: var(--steel-dim); }
+  .hist-item-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .hist-type {
+    font-family: var(--sign);
+    font-weight: 700;
+    font-size: 9.5px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .hist-time {
+    font-size: 9.5px;
+    color: var(--paper-dim);
+    white-space: nowrap;
+  }
+  .hist-text {
+    color: var(--paper);
+    line-height: 1.4;
+    word-break: break-word;
+  }
+  .hist-flags {
+    margin-top: 4px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .hist-flag {
+    font-size: 9px;
+    color: var(--amber);
+    letter-spacing: 0.4px;
+  }
+  .hist-loading {
+    color: var(--paper-dim);
+    font-size: 11px;
+    padding: 20px 4px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -607,6 +733,10 @@
             Send Update Alert
             <span class="qsub">Instant alert popup with one-click "Update and Restart" — fleet-wide</span>
           </button>
+          <button class="quick-btn outline" id="historyBtn">
+            Message History
+            <span class="qsub">View every message sent to the fleet, newest first</span>
+          </button>
         </div>
       </div>
 
@@ -649,11 +779,33 @@
 
 </div>
 
+<!-- ── History modal — fetched from broadcast-history.json on open,
+     not preloaded on page load, since it's only needed when a tech
+     actually wants to review past sends. ── -->
+<div class="modal-overlay" id="historyOverlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title">Message History</span>
+      <button class="modal-close" id="historyClose">Close</button>
+    </div>
+    <div class="modal-body" id="historyBody">
+      <div class="hist-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <script>
-const OWNER  = 'lucentRanger';
-const REPO   = 'NEW-RANGER-LAPTOP-V2';
-const PATH   = 'broadcast.json';
-const API    = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+const OWNER      = 'lucentRanger';
+const REPO       = 'NEW-RANGER-LAPTOP-V2';
+const PATH       = 'broadcast.json';
+const HISTORY_PATH = 'broadcast-history.json';
+const API        = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+const HISTORY_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${HISTORY_PATH}`;
+// Cap on how many entries are kept in broadcast-history.json. Older
+// entries roll off the front once this is exceeded, so the file (and
+// every laptop-side/browser-side fetch of it) can't grow unbounded
+// over months of fleet use.
+const MAX_HISTORY_ENTRIES = 500;
 
 const tokenEl       = document.getElementById('token');
 const rememberEl    = document.getElementById('rememberToken');
@@ -685,6 +837,10 @@ const mockImg       = document.getElementById('mockImg');
 const mockCaption   = document.getElementById('mockCaption');
 const mockTime      = document.getElementById('mockTime');
 const previewSize   = document.getElementById('previewSize');
+const historyBtn     = document.getElementById('historyBtn');
+const historyOverlay = document.getElementById('historyOverlay');
+const historyClose   = document.getElementById('historyClose');
+const historyBody    = document.getElementById('historyBody');
 
 let selectedType = 'banner';
 
@@ -1028,6 +1184,75 @@ async function uploadImage(token, dataUrl, id) {
   return path;
 }
 
+// ── History: broadcast-history.json is a single JSON ARRAY (unlike
+// broadcast.json, which is always a single overwritten object) —
+// every send appends a new entry instead of replacing the file.
+// GitHub's Contents API has no atomic append; every write needs the
+// file's current `sha`. If two people send within moments of each
+// other the second PUT can 409 on a stale sha, so this retries once
+// with a freshly re-fetched sha before giving up. A failure here never
+// blocks or rolls back the actual broadcast — the message has already
+// gone out by the time this runs; at worst that one entry is missing
+// from the log, which is why the caller only logs a console warning
+// rather than surfacing an error to the tech.
+async function getHistoryFile(token) {
+  const res = await fetch(HISTORY_API, { headers: ghHeaders(token) });
+  if (res.status === 404) return { exists: false, sha: null, entries: [] };
+  if (!res.ok) throw new Error(`GITHUB ${res.status}: ${(await res.json()).message || 'unknown'}`);
+  const data = await res.json();
+  let entries = [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+    if (Array.isArray(parsed)) entries = parsed;
+  } catch (e) {}
+  return { exists: true, sha: data.sha, entries };
+}
+
+async function putHistoryFile(token, sha, entries, commitMessage) {
+  const body = { message: commitMessage, content: btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2)))) };
+  if (sha) body.sha = sha;
+  const res = await fetch(HISTORY_API, { method: 'PUT', headers: ghHeaders(token), body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const httpErr = new Error(`GITHUB ${res.status}: ${err.message || 'unknown'}`);
+    httpErr.status = res.status;
+    throw httpErr;
+  }
+  return res.json();
+}
+
+async function appendToHistory(token, payload, attempt = 0) {
+  try {
+    const { sha, entries } = await getHistoryFile(token);
+    const entry = {
+      message: payload.message,
+      type: payload.type,
+      id: payload.id,
+      show_update_button: !!payload.show_update_button,
+      // Real repo-relative path (e.g. "broadcast-images/xxxx.png"), not
+      // just a boolean — this is what lets a laptop re-fetch and
+      // redisplay the actual photo when a Ranger reopens an old alert
+      // from their on-screen History list, not just show it had one.
+      image_url: payload.image_url || '',
+      image_target_width: payload.image_target_width || 0,
+      sent_at: new Date().toISOString()
+    };
+    const updated = [...entries, entry].slice(-MAX_HISTORY_ENTRIES);
+    await putHistoryFile(token, sha, updated, `History: ${payload.message.slice(0,60)}`);
+  } catch (e) {
+    // 409 = someone else's write landed between our GET and PUT (stale
+    // sha) — re-fetch and retry once. Any other failure, or a second
+    // 409, is logged and swallowed rather than shown to the tech: the
+    // broadcast itself already succeeded, and history is a record, not
+    // a critical path.
+    if (e.status === 409 && attempt < 1) {
+      await appendToHistory(token, payload, attempt + 1);
+    } else {
+      console.warn('History log failed (broadcast still sent fine):', e);
+    }
+  }
+}
+
 async function refreshCurrent() {
   const token = tokenEl.value.trim();
   if (!token) {
@@ -1078,6 +1303,11 @@ async function transmitPayload(payload, commitLabel, busyBtn, imageDataUrl) {
     showStatus('ok', 'SENT — fleet will pick this up within ~2 min');
     if (imageDataUrl && pendingImageDataUrl) imgRemove.click();
     await refreshCurrent();
+    // Logged after the real broadcast succeeds, and never awaited by
+    // the caller's critical path — a slow or failed history write
+    // should never delay or block the "SENT" confirmation the tech
+    // is waiting on.
+    appendToHistory(token, payload);
   } catch (e) {
     showStatus('err', (e.message || 'TRANSMIT FAILED').toUpperCase());
   } finally {
@@ -1139,6 +1369,68 @@ clearBtn.addEventListener('click', async () => {
   } finally {
     clearBtn.disabled = false;
   }
+});
+
+// ── History modal wiring ──
+function formatHistTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso || '';
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit'
+  });
+}
+
+function renderHistory(entries) {
+  if (!entries.length) {
+    historyBody.innerHTML = '<div class="hist-empty">No messages logged yet.</div>';
+    return;
+  }
+  // Newest first.
+  const ordered = [...entries].reverse();
+  historyBody.innerHTML = ordered.map(e => {
+    const type = (e.type === 'alert') ? 'alert' : 'banner';
+    const flags = [];
+    if (e.show_update_button) flags.push('<span class="hist-flag">+ UPDATE BTN</span>');
+    if (e.image_url) flags.push('<span class="hist-flag">+ IMAGE</span>');
+    const text = (e.message || '').replace(/</g, '&lt;');
+    return `
+      <div class="hist-item type-${type}">
+        <div class="hist-item-top">
+          <span class="hist-type">${type}</span>
+          <span class="hist-time">${formatHistTime(e.sent_at)}</span>
+        </div>
+        <div class="hist-text">${text || '<em>(empty)</em>'}</div>
+        ${flags.length ? `<div class="hist-flags">${flags.join('')}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+async function openHistory() {
+  historyOverlay.classList.add('show');
+  historyBody.innerHTML = '<div class="hist-loading">Loading…</div>';
+  const token = tokenEl.value.trim();
+  if (!token) {
+    historyBody.innerHTML = '<div class="hist-empty">Enter your GitHub token above to view history.</div>';
+    return;
+  }
+  try {
+    const { entries } = await getHistoryFile(token);
+    renderHistory(entries);
+  } catch (e) {
+    historyBody.innerHTML = `<div class="hist-empty">Could not load history: ${(e.message || 'unknown error').replace(/</g,'&lt;')}</div>`;
+  }
+}
+function closeHistory() {
+  historyOverlay.classList.remove('show');
+}
+historyBtn.addEventListener('click', openHistory);
+historyClose.addEventListener('click', closeHistory);
+historyOverlay.addEventListener('click', (ev) => {
+  if (ev.target === historyOverlay) closeHistory();
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && historyOverlay.classList.contains('show')) closeHistory();
 });
 
 tokenEl.addEventListener('blur', refreshCurrent);
