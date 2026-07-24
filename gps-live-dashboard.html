@@ -166,7 +166,7 @@
   <div id="login-simple">
     <label for="login-username">Username</label>
     <input id="login-username" autocomplete="off">
-    <label for="login-password">Access code</label>
+    <label for="login-password">Password</label>
     <input id="login-password" type="password" autocomplete="off">
     <button id="login-btn">Log in</button>
     <div class="err" id="login-err"></div>
@@ -253,11 +253,11 @@
     connect(url, token);
   }
 
-  document.getElementById('login-btn').addEventListener('click', function () {
+  function doLogin() {
     var username = usernameInput.value.trim();
     var password = passwordInput.value.trim();
     if (!username || !password) {
-      loginErrEl.textContent = 'Enter both username and access code.';
+      loginErrEl.textContent = 'Enter both username and password.';
       return;
     }
     loginErrEl.textContent = 'Logging in…';
@@ -269,7 +269,7 @@
       .then(function (res) {
         if (res.status === 429) throw new Error('Too many attempts — wait a few minutes and try again.');
         if (res.status === 404) throw new Error('Login isn\'t set up on the relay yet.');
-        if (!res.ok) throw new Error('Incorrect access code.');
+        if (!res.ok) throw new Error('Incorrect username or password.');
         return res.json();
       })
       .then(function (data) {
@@ -279,9 +279,15 @@
       .catch(function (err) {
         loginErrEl.textContent = err.message || 'Login failed.';
       });
+  }
+  document.getElementById('login-btn').addEventListener('click', doLogin);
+  [usernameInput, passwordInput].forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
+    });
   });
 
-  document.getElementById('connect-btn').addEventListener('click', function () {
+  function doManualConnect() {
     var url = urlInput.value.trim();
     var token = tokenInput.value.trim();
     if (!url || !token) {
@@ -290,6 +296,12 @@
     }
     manualErrEl.textContent = '';
     enterDashboard(url, token);
+  }
+  document.getElementById('connect-btn').addEventListener('click', doManualConnect);
+  [urlInput, tokenInput].forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doManualConnect(); }
+    });
   });
 
   function connect(url, token) {
