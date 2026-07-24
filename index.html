@@ -655,11 +655,6 @@
   </header>
   <div class="subline">Message is pushed to every active Ranger laptop on its next check-in.</div>
 
-  <div class="token-set-strip" id="tokenSetStrip">
-    <span class="lit">TOKEN SET</span>
-    <button id="reopenToken">Change</button>
-  </div>
-
   <div class="grid">
     <div class="col-left">
       <div class="panel" id="tokenPanel">
@@ -676,7 +671,6 @@
           <!-- Hidden -- still populated by the login flow above and read
                by the existing GitHub-call code below unchanged. -->
           <input type="hidden" id="token">
-          <input type="checkbox" id="rememberToken" style="display:none">
         </div>
       </div>
 
@@ -813,7 +807,6 @@ const HISTORY_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${HI
 const MAX_HISTORY_ENTRIES = 500;
 
 const tokenEl       = document.getElementById('token');
-const rememberEl    = document.getElementById('rememberToken');
 const msgEl         = document.getElementById('msgText');
 const charCountEl   = document.getElementById('charCount');
 const sendBtn       = document.getElementById('sendBtn');
@@ -825,9 +818,6 @@ const tabAlert      = document.getElementById('tabAlert');
 const modeNote      = document.getElementById('modeNote');
 const updateRow     = document.getElementById('updateRow');
 const showUpdateBtn = document.getElementById('showUpdateBtn');
-const tokenPanel    = document.getElementById('tokenPanel');
-const tokenSetStrip = document.getElementById('tokenSetStrip');
-const reopenToken   = document.getElementById('reopenToken');
 const quickUpdateBtn = document.getElementById('quickUpdateBtn');
 const imageFile     = document.getElementById('imageFile');
 const imgDrop       = document.getElementById('imgDrop');
@@ -861,16 +851,6 @@ const MODE_NOTES = {
   alert:  'Full-screen popup, dismissed by hand.'
 };
 
-function collapseTokenPanel() {
-  tokenPanel.style.display = 'none';
-  tokenSetStrip.classList.add('show');
-}
-function expandTokenPanel() {
-  tokenPanel.style.display = 'block';
-  tokenSetStrip.classList.remove('show');
-  tokenEl.focus();
-}
-reopenToken.addEventListener('click', expandTokenPanel);
 
 // ── Login — hands the real GitHub token to this page only after a
 // username/password check against the relay, instead of anyone needing
@@ -884,6 +864,7 @@ const senderLoginErrEl = document.getElementById('senderLoginErr');
 async function doSenderLogin() {
   const username = senderLoginUserEl.value.trim();
   const password = senderLoginPwEl.value.trim();
+  senderLoginErrEl.style.color = '#ff6b6b';
   if (!username || !password) { senderLoginErrEl.textContent = 'Enter both username and password.'; return; }
   senderLoginErrEl.textContent = 'Logging in…';
   try {
@@ -896,9 +877,10 @@ async function doSenderLogin() {
     if (res.status === 404) throw new Error('Login isn\'t set up on the relay yet.');
     if (!res.ok) throw new Error('Incorrect username or password.');
     const data = await res.json();
-    senderLoginErrEl.textContent = '';
     tokenEl.value = data.githubToken;
     await refreshCurrent();
+    senderLoginErrEl.textContent = 'Logged in.';
+    senderLoginErrEl.style.color = 'var(--ok)';
   } catch (e) {
     senderLoginErrEl.textContent = e.message || 'Login failed.';
   }
@@ -909,20 +891,6 @@ senderLoginBtn.addEventListener('click', doSenderLogin);
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); doSenderLogin(); }
   });
-});
-
-// Collapse the token panel once a token is present and validated (on
-// blur, right after the existing-broadcast check succeeds) — folding a
-// working token out of the way instead of leaving a filled password
-// field sitting open indefinitely.
-const savedToken = localStorage.getItem('d7_broadcast_token');
-if (savedToken) {
-  tokenEl.value = savedToken;
-  rememberEl.checked = true;
-  collapseTokenPanel();
-}
-rememberEl.addEventListener('change', () => {
-  if (!rememberEl.checked) localStorage.removeItem('d7_broadcast_token');
 });
 
 msgEl.addEventListener('input', () => {
@@ -1306,10 +1274,6 @@ async function refreshCurrent() {
   }
   try {
     const { exists, content } = await getCurrentFile(token);
-    // A successful call (whether or not the file exists yet) confirms
-    // the token actually works — fold the access panel away at that
-    // point rather than leaving it expanded indefinitely.
-    collapseTokenPanel();
     if (!exists || !content || !content.message) {
       currentVal.textContent = 'nothing queued';
       currentVal.className = 'val none';
@@ -1331,7 +1295,6 @@ async function transmitPayload(payload, commitLabel, busyBtn, imageDataUrl) {
   hideStatus();
   const token = tokenEl.value.trim();
   if (!token) { showStatus('err', 'TOKEN REQUIRED'); return; }
-  if (rememberEl.checked) localStorage.setItem('d7_broadcast_token', token);
 
   busyBtn.disabled = true;
   try {
