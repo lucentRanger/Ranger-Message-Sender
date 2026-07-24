@@ -164,6 +164,8 @@
   <h2>D7 Ranger Kiosk — Live GPS Fleet</h2>
 
   <div id="login-simple">
+    <label for="login-username">Username</label>
+    <input id="login-username" autocomplete="off">
     <label for="login-password">Access code</label>
     <input id="login-password" type="password" autocomplete="off">
     <button id="login-btn">Log in</button>
@@ -224,6 +226,7 @@
 
   var simpleEl = document.getElementById('login-simple');
   var manualEl = document.getElementById('login-manual');
+  var usernameInput = document.getElementById('login-username');
   var passwordInput = document.getElementById('login-password');
   var urlInput = document.getElementById('relay-url');
   var tokenInput = document.getElementById('relay-token');
@@ -251,16 +254,17 @@
   }
 
   document.getElementById('login-btn').addEventListener('click', function () {
+    var username = usernameInput.value.trim();
     var password = passwordInput.value.trim();
-    if (!password) {
-      loginErrEl.textContent = 'Enter the access code.';
+    if (!username || !password) {
+      loginErrEl.textContent = 'Enter both username and access code.';
       return;
     }
     loginErrEl.textContent = 'Logging in…';
     fetch(LOGIN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: password }),
+      body: JSON.stringify({ username: username, password: password }),
     })
       .then(function (res) {
         if (res.status === 429) throw new Error('Too many attempts — wait a few minutes and try again.');
