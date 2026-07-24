@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>D7 Ranger Kiosk — Live GPS Spoofer Fleet</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #121a2b;
+    --border: #223049;
+    --text: #e8edf7;
+    --muted: #8fa0bd;
+    --accent: #4fa8ff;
+    --accent2: #7ee0c3;
+    --green: #34c98a;
+    --red: #ef5a6f;
+    --amber: #f2b84b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 17px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  header h1 span { color: var(--accent2); }
+  #conn-state {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  #conn-state.ok { color: var(--green); border-color: var(--green); }
+  #conn-state.bad { color: var(--red); border-color: var(--red); }
+  #summary { margin-left: auto; font-size: 13px; color: var(--muted); }
+
+  #login {
+    max-width: 420px;
+    margin: 80px auto;
+    padding: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  #login h2 { margin-top: 0; font-size: 16px; }
+  #login label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  #login input {
+    width: 100%;
+    padding: 9px 10px;
+    background: #0e1626;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  #login button {
+    margin-top: 16px;
+    width: 100%;
+    padding: 10px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #001321;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #login .err { color: var(--red); font-size: 12px; margin-top: 10px; min-height: 14px; }
+  #login .hint { color: var(--muted); font-size: 11px; margin-top: 14px; line-height: 1.5; }
+
+  main {
+    padding: 18px 20px 40px;
+    display: none;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .card.offline { opacity: 0.55; }
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .card-head .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .card.online .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .card.offline .dot { background: var(--red); }
+  .card-head .host {
+    font-family: Consolas, monospace;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .card-head .badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .badge.frg { color: var(--green); border-color: var(--green); }
+  .badge.trans { color: var(--amber); border-color: var(--amber); }
+  .badge.ls { color: var(--accent); border-color: var(--accent); }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    padding: 3px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--muted); }
+  .row .v { font-family: Consolas, monospace; text-align: right; }
+  .v.green { color: var(--green); }
+  .v.red { color: var(--red); }
+  .v.amber { color: var(--amber); }
+  .sec-title {
+    font-size: 10.5px;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 10px 0 2px;
+  }
+  #empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h2>D7 Ranger Kiosk — Live GPS Fleet</h2>
+  <label for="relay-url">Relay URL</label>
+  <input id="relay-url" placeholder="wss://your-relay-host/dashboard" autocomplete="off">
+  <label for="relay-token">Access token</label>
+  <input id="relay-token" type="password" autocomplete="off">
+  <button id="connect-btn">Connect</button>
+  <div class="err" id="login-err"></div>
+  <div class="hint">
+    Nothing here is stored anywhere except this browser's local storage.
+    The token is never embedded in this page's source.
+  </div>
+</div>
+
+<header style="display:none" id="app-header">
+  <h1>🛰️ D7 Ranger Kiosk — Live <span>GPS Spoofer</span> Fleet</h1>
+  <span id="conn-state">connecting…</span>
+  <span id="summary"></span>
+</header>
+
+<main id="app-main">
+  <div id="grid"></div>
+  <div id="empty" style="display:none">No laptops have reported yet.</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var loginEl = document.getElementById('login');
+  var headerEl = document.getElementById('app-header');
+  var mainEl = document.getElementById('app-main');
+  var connState = document.getElementById('conn-state');
+  var summaryEl = document.getElementById('summary');
+  var gridEl = document.getElementById('grid');
+  var emptyEl = document.getElementById('empty');
+  var errEl = document.getElementById('login-err');
+
+  var laptops = {}; // hostname -> data
+  var ws = null;
+  var reconnectDelay = 1000;
+  var reconnectTimer = null;
+
+  var urlInput = document.getElementById('relay-url');
+  var tokenInput = document.getElementById('relay-token');
+  urlInput.value = localStorage.getItem('gps_relay_url') || '';
+  tokenInput.value = localStorage.getItem('gps_relay_token') || '';
+
+  document.getElementById('connect-btn').addEventListener('click', function () {
+    var url = urlInput.value.trim();
+    var token = tokenInput.value.trim();
+    if (!url || !token) {
+      errEl.textContent = 'Enter both the relay URL and the access token.';
+      return;
+    }
+    errEl.textContent = '';
+    localStorage.setItem('gps_relay_url', url);
+    localStorage.setItem('gps_relay_token', token);
+    loginEl.style.display = 'none';
+    headerEl.style.display = 'flex';
+    mainEl.style.display = 'block';
+    connect(url, token);
+  });
+
+  function connect(url, token) {
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    var full = url + sep + 'token=' + encodeURIComponent(token);
+    ws = new WebSocket(full);
+
+    ws.onopen = function () {
+      reconnectDelay = 1000;
+      setConnState(true);
+    };
+    ws.onclose = function () {
+      setConnState(false);
+      reconnectTimer = setTimeout(function () { connect(url, token); }, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 1.6, 15000);
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+    ws.onmessage = function (evt) {
+      var msg;
+      try { msg = JSON.parse(evt.data); } catch (e) { return; }
+      if (msg.type === 'snapshot') {
+        laptops = msg.data || {};
+      } else if (msg.type === 'update') {
+        laptops[msg.hostname] = msg.data;
+      }
+      render();
+    };
+  }
+
+  function setConnState(ok) {
+    connState.textContent = ok ? 'live' : 'reconnecting…';
+    connState.className = ok ? 'ok' : 'bad';
+  }
+
+  function fmtTs(iso) {
+    if (!iso) return 'Never';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleTimeString();
+    } catch (e) { return iso; }
+  }
+
+  function lastSeenText(lastSeen) {
+    if (!lastSeen) return '—';
+    var secs = Math.round((Date.now() - lastSeen) / 1000);
+    if (secs < 5) return 'just now';
+    if (secs < 60) return secs + 's ago';
+    return Math.round(secs / 60) + 'm ago';
+  }
+
+  function labelBadge(label) {
+    if (label === 'FrG') return { text: 'GPS FRG', cls: 'frg' };
+    if (label && label.indexOf('FrG') !== -1) return { text: 'LS(FrG)', cls: 'trans' };
+    return { text: label || 'LS', cls: 'ls' };
+  }
+
+  function row(k, v, cls) {
+    return '<div class="row"><span class="k">' + k + '</span>' +
+           '<span class="v' + (cls ? ' ' + cls : '') + '">' + v + '</span></div>';
+  }
+
+  function render() {
+    var hosts = Object.keys(laptops).sort();
+    summaryEl.textContent = hosts.length + ' laptop' + (hosts.length === 1 ? '' : 's') +
+      ' reporting · ' + hosts.filter(function (h) { return laptops[h].online; }).length + ' online';
+
+    if (hosts.length === 0) {
+      gridEl.innerHTML = '';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    gridEl.innerHTML = hosts.map(function (host) {
+      var d = laptops[host] || {};
+      var online = !!d.online;
+      var badge = labelBadge(d.label_state);
+      var fix = d.nmea_fix || 'No Data';
+      var fixCls = fix === 'Valid' ? 'green' : fix === 'No Fix' ? 'amber' : 'red';
+      var procCls = d.spoofer_running ? 'green' : 'red';
+      var portCls = d.port_listening ? 'green' : 'red';
+      var lat = (typeof d.latitude === 'number') ? d.latitude.toFixed(6) : '—';
+      var lon = (typeof d.longitude === 'number') ? d.longitude.toFixed(6) : '—';
+      var alt = (typeof d.altitude === 'number') ? d.altitude.toFixed(1) + ' m' : '—';
+      var spd = (typeof d.ground_speed_kmh === 'number') ? d.ground_speed_kmh.toFixed(1) + ' km/h' : '—';
+      var hdg = (typeof d.heading === 'number') ? d.heading.toFixed(0) + '°' : '—';
+      var hdop = (typeof d.hdop === 'number') ? d.hdop.toFixed(1) : '—';
+
+      return (
+        '<div class="card ' + (online ? 'online' : 'offline') + '">' +
+          '<div class="card-head">' +
+            '<span class="dot"></span>' +
+            '<span class="host">' + host + '</span>' +
+            '<span class="badge ' + badge.cls + '">' + badge.text + '</span>' +
+          '</div>' +
+          row('Spoofer Process', d.spoofer_running ? ('Running (PID ' + d.spoofer_pid + ')') : 'STOPPED', procCls) +
+          row('Port 12175', d.port_listening ? 'Listening' : 'Not listening', portCls) +
+          row('INService Conns', d.inservice_conns || '–') +
+          row('Active COM Port', d.active_com || 'None') +
+          row('NMEA Fix', fix, fixCls) +
+          row('Satellites', d.satellites != null ? d.satellites : 0) +
+          row('Last NMEA', fmtTs(d.last_nmea_ts)) +
+          '<div class="sec-title">POSITION</div>' +
+          row('Latitude', lat) +
+          row('Longitude', lon) +
+          row('Altitude', alt) +
+          row('Speed', spd) +
+          row('Heading', hdg) +
+          row('HDOP', hdop) +
+          '<div class="sec-title">RELAY</div>' +
+          row('Last report', lastSeenText(d.lastSeen)) +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  // Re-render every few seconds so "last report" ages even with no new
+  // messages arriving.
+  setInterval(render, 5000);
+
+  if (urlInput.value && tokenInput.value) {
+    // Don't auto-connect -- require an explicit click even with saved
+    // values, so the token never leaves storage without the viewer
+    // knowing this page is about to use it.
+  }
+})();
+</script>
+</body>
+</html>
