@@ -81,9 +81,9 @@
     .grid { grid-template-columns: 1fr; }
   }
 
-  /* ── Token access — collapses to a single reopenable strip once set ── */
-  .token-set-strip {
-    display: none;
+  /* ── Session strip — shown instead of the Access panel once logged in ── */
+  .session-strip {
+    display: flex;
     align-items: center;
     justify-content: space-between;
     border: 1px solid var(--panel-line);
@@ -93,9 +93,8 @@
     font-size: 11px;
     color: var(--paper-dim);
   }
-  .token-set-strip.show { display: flex; }
-  .token-set-strip .lit { color: var(--ok); }
-  .token-set-strip .lit::before {
+  .session-strip .lit { color: var(--ok); }
+  .session-strip .lit::before {
     content: '';
     display: inline-block;
     width: 7px; height: 7px;
@@ -104,7 +103,7 @@
     margin-right: 7px;
     box-shadow: 0 0 5px var(--ok);
   }
-  .token-set-strip button {
+  .session-strip button {
     background: transparent;
     border: 1px solid var(--panel-line);
     color: var(--paper-dim);
@@ -116,7 +115,7 @@
     padding: 6px 12px;
     cursor: pointer;
   }
-  .token-set-strip button:hover { border-color: var(--amber); color: var(--amber); }
+  .session-strip button:hover { border-color: var(--amber); color: var(--amber); }
 
   /* ── Console panels ── */
   .panel {
@@ -201,7 +200,7 @@
   }
   label.field-label:not(:first-child) { margin-top: 10px; }
 
-  input[type="password"], textarea {
+  input[type="password"], input[type="text"], textarea {
     width: 100%;
     background: #0e1013;
     border: 1px solid var(--panel-line);
@@ -212,7 +211,7 @@
     outline: none;
     border-radius: 0;
   }
-  input[type="password"]:focus, textarea:focus {
+  input[type="password"]:focus, input[type="text"]:focus, textarea:focus {
     border-color: var(--amber);
   }
   textarea { resize: vertical; min-height: 64px; line-height: 1.4; }
@@ -655,6 +654,11 @@
   </header>
   <div class="subline">Message is pushed to every active Ranger laptop on its next check-in.</div>
 
+  <div class="session-strip" id="sessionStrip" style="display:none">
+    <span class="lit">LOGGED IN AS <span id="sessionUser"></span></span>
+    <button type="button" id="logoutBtn">Log out</button>
+  </div>
+
   <div class="grid">
     <div class="col-left">
       <div class="panel" id="tokenPanel">
@@ -662,10 +666,10 @@
         <div class="panel-body">
           <div id="senderLoginBox">
             <label class="field-label" for="senderLoginUsername">Username</label>
-            <input id="senderLoginUsername" autocomplete="off">
+            <input type="text" id="senderLoginUsername" autocomplete="off">
             <label class="field-label" for="senderLoginPassword">Password</label>
             <input type="password" id="senderLoginPassword" autocomplete="off">
-            <button type="button" id="senderLoginBtn" style="margin-top:8px;">Log in</button>
+            <button type="button" class="tx" id="senderLoginBtn" style="margin-top:8px;">Log in</button>
             <div class="footnote" id="senderLoginErr" style="color:#ff6b6b;"></div>
           </div>
           <!-- Hidden -- still populated by the login flow above and read
@@ -807,6 +811,10 @@ const HISTORY_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${HI
 const MAX_HISTORY_ENTRIES = 500;
 
 const tokenEl       = document.getElementById('token');
+const tokenPanel    = document.getElementById('tokenPanel');
+const sessionStrip  = document.getElementById('sessionStrip');
+const sessionUserEl = document.getElementById('sessionUser');
+const logoutBtn     = document.getElementById('logoutBtn');
 const msgEl         = document.getElementById('msgText');
 const charCountEl   = document.getElementById('charCount');
 const sendBtn       = document.getElementById('sendBtn');
@@ -878,13 +886,39 @@ async function doSenderLogin() {
     if (!res.ok) throw new Error('Incorrect username or password.');
     const data = await res.json();
     tokenEl.value = data.githubToken;
+    // Stays logged in indefinitely on this machine by design (explicit
+    // request: shared kiosk-ops computers, not personal devices) --
+    // Log out is the only thing that clears it.
+    localStorage.setItem('d7_sender_token', data.githubToken);
+    localStorage.setItem('d7_sender_username', username);
     await refreshCurrent();
-    senderLoginErrEl.textContent = 'Logged in.';
-    senderLoginErrEl.style.color = 'var(--ok)';
+    enterSenderLoggedIn(username);
   } catch (e) {
     senderLoginErrEl.textContent = e.message || 'Login failed.';
   }
 }
+
+function enterSenderLoggedIn(username) {
+  tokenPanel.style.display = 'none';
+  sessionStrip.style.display = 'flex';
+  sessionUserEl.textContent = (username || 'admin').toUpperCase();
+}
+
+function enterSenderLoggedOut() {
+  tokenPanel.style.display = 'block';
+  sessionStrip.style.display = 'none';
+  tokenEl.value = '';
+  senderLoginUserEl.value = '';
+  senderLoginPwEl.value = '';
+  senderLoginErrEl.textContent = '';
+  senderLoginErrEl.style.color = '#ff6b6b';
+}
+
+logoutBtn.addEventListener('click', () => {
+  localStorage.removeItem('d7_sender_token');
+  localStorage.removeItem('d7_sender_username');
+  enterSenderLoggedOut();
+});
 
 senderLoginBtn.addEventListener('click', doSenderLogin);
 [senderLoginUserEl, senderLoginPwEl].forEach((el) => {
@@ -892,6 +926,14 @@ senderLoginBtn.addEventListener('click', doSenderLogin);
     if (e.key === 'Enter') { e.preventDefault(); doSenderLogin(); }
   });
 });
+
+// ── Auto-resume a previous login ──
+const storedSenderToken = localStorage.getItem('d7_sender_token');
+if (storedSenderToken) {
+  tokenEl.value = storedSenderToken;
+  enterSenderLoggedIn(localStorage.getItem('d7_sender_username'));
+  refreshCurrent();
+}
 
 msgEl.addEventListener('input', () => {
   charCountEl.textContent = msgEl.value.length;
