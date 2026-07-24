@@ -666,6 +666,8 @@
         <div class="panel-head">Access</div>
         <div class="panel-body">
           <div id="senderLoginBox">
+            <label class="field-label" for="senderLoginUsername">Username</label>
+            <input id="senderLoginUsername" autocomplete="off">
             <label class="field-label" for="senderLoginPassword">Access code</label>
             <input type="password" id="senderLoginPassword" autocomplete="off">
             <button type="button" id="senderLoginBtn" style="margin-top:8px;">Log in</button>
@@ -885,6 +887,7 @@ reopenToken.addEventListener('click', expandTokenPanel);
 const SENDER_LOGIN_ENDPOINT = 'https://d7-ranger-gps-relay.onrender.com/sender-login';
 const senderLoginBox   = document.getElementById('senderLoginBox');
 const tokenManualBox   = document.getElementById('tokenManualBox');
+const senderLoginUserEl = document.getElementById('senderLoginUsername');
 const senderLoginPwEl  = document.getElementById('senderLoginPassword');
 const senderLoginBtn   = document.getElementById('senderLoginBtn');
 const senderLoginErrEl = document.getElementById('senderLoginErr');
@@ -901,14 +904,15 @@ document.getElementById('showSenderLogin').addEventListener('click', (e) => {
 });
 
 senderLoginBtn.addEventListener('click', async () => {
+  const username = senderLoginUserEl.value.trim();
   const password = senderLoginPwEl.value.trim();
-  if (!password) { senderLoginErrEl.textContent = 'Enter the access code.'; return; }
+  if (!username || !password) { senderLoginErrEl.textContent = 'Enter both username and access code.'; return; }
   senderLoginErrEl.textContent = 'Logging in…';
   try {
     const res = await fetch(SENDER_LOGIN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
     if (res.status === 429) throw new Error('Too many attempts — wait a few minutes and try again.');
     if (res.status === 404) throw new Error('Login isn\'t set up on the relay yet.');
