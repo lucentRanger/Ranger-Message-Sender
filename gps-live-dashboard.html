@@ -51,6 +51,16 @@
   #conn-state.ok { color: var(--green); border-color: var(--green); }
   #conn-state.bad { color: var(--red); border-color: var(--red); }
   #summary { margin-left: auto; font-size: 13px; color: var(--muted); }
+  #logout-btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #logout-btn:hover { border-color: var(--red); color: var(--red); }
 
   #login {
     max-width: 420px;
@@ -196,6 +206,7 @@
   <h1>🛰️ D7 Ranger Kiosk — Live <span>GPS Spoofer</span> Fleet</h1>
   <span id="conn-state">connecting…</span>
   <span id="summary"></span>
+  <button id="logout-btn" type="button">Log out</button>
 </header>
 
 <main id="app-main">
@@ -214,6 +225,7 @@
   var mainEl = document.getElementById('app-main');
   var connState = document.getElementById('conn-state');
   var summaryEl = document.getElementById('summary');
+  var logoutBtn = document.getElementById('logout-btn');
   var gridEl = document.getElementById('grid');
   var emptyEl = document.getElementById('empty');
   var loginErrEl = document.getElementById('login-err');
@@ -245,6 +257,9 @@
   });
 
   function enterDashboard(url, token) {
+    // Persists indefinitely by design (explicit request: shared kiosk-ops
+    // computers, not personal devices) -- Log out is the only thing that
+    // clears it.
     localStorage.setItem('gps_relay_url', url);
     localStorage.setItem('gps_relay_token', token);
     loginEl.style.display = 'none';
@@ -252,6 +267,20 @@
     mainEl.style.display = 'block';
     connect(url, token);
   }
+
+  logoutBtn.addEventListener('click', function () {
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    localStorage.removeItem('gps_relay_url');
+    localStorage.removeItem('gps_relay_token');
+    laptops = {};
+    usernameInput.value = '';
+    passwordInput.value = '';
+    loginErrEl.textContent = '';
+    headerEl.style.display = 'none';
+    mainEl.style.display = 'none';
+    loginEl.style.display = 'block';
+  });
 
   function doLogin() {
     var username = usernameInput.value.trim();
@@ -422,10 +451,11 @@
   // messages arriving.
   setInterval(render, 5000);
 
+  // Auto-resume a previous login (explicit request: stay logged in
+  // permanently on this machine, same as the message sender). Log out
+  // is the only thing that clears it.
   if (urlInput.value && tokenInput.value) {
-    // Don't auto-connect -- require an explicit click even with saved
-    // values, so the token never leaves storage without the viewer
-    // knowing this page is about to use it.
+    enterDashboard(urlInput.value, tokenInput.value);
   }
 })();
 </script>
